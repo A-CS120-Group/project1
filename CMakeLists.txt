@@ -26,9 +26,26 @@ target_compile_definitions(Project1
 
 target_link_libraries(Project1
         PRIVATE
-        # ConsoleAppData            # If you'd created a binary data target, you'd link to it here
+        juce::juce_analytics
+        juce::juce_audio_basics
+        juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_audio_plugin_client
+        juce::juce_audio_processors
+        juce::juce_audio_utils
+        juce::juce_box2d
         juce::juce_core
+        juce::juce_cryptography
+        juce::juce_data_structures
+        juce::juce_dsp
+        juce::juce_events
+        juce::juce_graphics
+        juce::juce_gui_basics
         juce::juce_gui_extra
+        juce::juce_opengl
+        juce::juce_osc
+        juce::juce_product_unlocking
+        juce::juce_video
         PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
