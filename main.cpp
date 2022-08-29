@@ -3,7 +3,6 @@
 
 class Application : public juce::JUCEApplication {
 public:
-    //==============================================================================
     Application() = default;
 
     const juce::String getApplicationName() override { return "Part1"; }
