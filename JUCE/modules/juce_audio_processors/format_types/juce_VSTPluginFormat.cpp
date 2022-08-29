@@ -1309,12 +1309,12 @@ struct VSTPluginInstance final   : public AudioPluginInstance,
     int pluginCanDo (const char* text) const  { return (int) dispatch (Vst2::effCanDo, 0, 0, (void*) text,  0); }
 
     //==============================================================================
-    void prepareToPlay (double rate, int samplesPerBlockExpected) override
+    void prepareToPlay (double rate, int _samplesPerBlockExpected) override
     {
         auto numInputBuses  = getBusCount (true);
         auto numOutputBuses = getBusCount (false);
 
-        setRateAndBufferSizeDetails (rate, samplesPerBlockExpected);
+        setRateAndBufferSizeDetails (rate, _samplesPerBlockExpected);
 
         if (numInputBuses <= 1 && numOutputBuses <= 1)
         {
@@ -1333,7 +1333,7 @@ struct VSTPluginInstance final   : public AudioPluginInstance,
                               | Vst2::kVstAutomationWriting
                               | Vst2::kVstAutomationReading;
 
-        initialise (rate, samplesPerBlockExpected);
+        initialise (rate, _samplesPerBlockExpected);
 
         if (initialised)
         {
@@ -1347,7 +1347,7 @@ struct VSTPluginInstance final   : public AudioPluginInstance,
             incomingMidi.clear();
 
             dispatch (Vst2::effSetSampleRate, 0, 0, nullptr, (float) rate);
-            dispatch (Vst2::effSetBlockSize, 0, jmax (16, samplesPerBlockExpected), nullptr, 0);
+            dispatch (Vst2::effSetBlockSize, 0, jmax (16, _samplesPerBlockExpected), nullptr, 0);
 
             if (supportsDoublePrecisionProcessing())
             {
@@ -1359,13 +1359,13 @@ struct VSTPluginInstance final   : public AudioPluginInstance,
 
             auto maxChannels = jmax (1, jmax (vstEffect->numInputs, vstEffect->numOutputs));
 
-            tmpBufferFloat .setSize (maxChannels, samplesPerBlockExpected);
-            tmpBufferDouble.setSize (maxChannels, samplesPerBlockExpected);
+            tmpBufferFloat .setSize (maxChannels, _samplesPerBlockExpected);
+            tmpBufferDouble.setSize (maxChannels, _samplesPerBlockExpected);
 
             channelBufferFloat .calloc (static_cast<size_t> (maxChannels));
             channelBufferDouble.calloc (static_cast<size_t> (maxChannels));
 
-            outOfPlaceBuffer.setSize (jmax (1, vstEffect->numOutputs), samplesPerBlockExpected);
+            outOfPlaceBuffer.setSize (jmax (1, vstEffect->numOutputs), _samplesPerBlockExpected);
 
             if (! isPowerOn)
                 setPower (true);

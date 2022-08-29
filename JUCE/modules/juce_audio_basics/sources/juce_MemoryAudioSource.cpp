@@ -35,7 +35,7 @@ MemoryAudioSource::MemoryAudioSource (AudioBuffer<float>& bufferToUse, bool copy
 }
 
 //==============================================================================
-void MemoryAudioSource::prepareToPlay (int /*samplesPerBlockExpected*/, double /*sampleRate*/)
+void MemoryAudioSource::prepareToPlay (int /*_samplesPerBlockExpected*/, double /*sampleRate*/)
 {
     position = 0;
 }

@@ -47,7 +47,7 @@ int64 AudioFormatReaderSource::getNextReadPosition() const
                    : nextPlayPos;
 }
 
-void AudioFormatReaderSource::prepareToPlay (int /*samplesPerBlockExpected*/, double /*sampleRate*/) {}
+void AudioFormatReaderSource::prepareToPlay (int /*_samplesPerBlockExpected*/, double /*sampleRate*/) {}
 void AudioFormatReaderSource::releaseResources() {}
 
 void AudioFormatReaderSource::getNextAudioBlock (const AudioSourceChannelInfo& info)

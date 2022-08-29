@@ -257,15 +257,15 @@ public:
     double getTailLengthSeconds() const override      { return 0.0; }
 
     //==============================================================================
-    void prepareToPlay (double newSampleRate, int samplesPerBlockExpected) override
+    void prepareToPlay (double newSampleRate, int _samplesPerBlockExpected) override
     {
         setLatencySamples (0);
 
-        initialise (newSampleRate, samplesPerBlockExpected);
+        initialise (newSampleRate, _samplesPerBlockExpected);
 
         if (initialised)
         {
-            tempBuffer.setSize (jmax (1, outputs.size()), samplesPerBlockExpected);
+            tempBuffer.setSize (jmax (1, outputs.size()), _samplesPerBlockExpected);
 
             // dodgy hack to force some plugins to initialise the sample rate..
             if (auto* firstParam = getParameters()[0])

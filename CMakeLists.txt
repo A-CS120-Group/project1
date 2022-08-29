@@ -12,8 +12,7 @@ juce_generate_juce_header(Project1)
 target_sources(Project1
         PRIVATE
         main.cpp
-        MainComponent.cpp
-        MainComponent.h
+        Part1.h
         )
 
 target_compile_definitions(Project1
