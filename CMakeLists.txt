@@ -1,29 +1,31 @@
 cmake_minimum_required(VERSION 3.23)
-project(Project1 VERSION 0.0.1)
+
+set(CURRENT_TARGET "Project1_Part1_2")
+
+project(${CURRENT_TARGET} VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 14)
 
 add_subdirectory(JUCE)
 
-juce_add_console_app(Project1 PRODUCT_NAME "CS120 Project1")
+juce_add_gui_app(${CURRENT_TARGET} PRODUCT_NAME ${CURRENT_TARGET})
 
-juce_generate_juce_header(Project1)
+juce_generate_juce_header(${CURRENT_TARGET})
 
-target_sources(Project1
+target_sources(${CURRENT_TARGET}
         PRIVATE
-        main.cpp
-        Part1.h
+        part1&2/main.cpp
+        part1&2/Part1&2.h
         )
 
-target_compile_definitions(Project1
+target_compile_definitions(${CURRENT_TARGET}
         PRIVATE
         # JUCE_WEB_BROWSER and JUCE_USE_CURL would be on by default, but you might not need them.
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
-        JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Project1,JUCE_PRODUCT_NAME>"
-        JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Project1,JUCE_VERSION>")
+        )
 
-target_link_libraries(Project1
+target_link_libraries(${CURRENT_TARGET}
         PRIVATE
         juce::juce_analytics
         juce::juce_audio_basics
@@ -50,4 +52,4 @@ target_link_libraries(Project1
         juce::juce_recommended_warning_flags)
 
 find_package(Boost COMPONENTS system filesystem REQUIRED)
-target_link_libraries(Project1 PRIVATE Boost::filesystem)
+target_link_libraries(${CURRENT_TARGET} PRIVATE Boost::filesystem)

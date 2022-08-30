@@ -1,5 +1,5 @@
-#include "Part1.h"
-#include <JuceHeader.h>
+#include "JuceHeader.h"
+#include "Part1&2.h"
 
 class Application : public juce::JUCEApplication {
 public:
@@ -8,9 +8,9 @@ public:
     const juce::String getApplicationName() override { return "Part1"; }
     const juce::String getApplicationVersion() override { return "1.0.0"; }
 
-    void initialise(const juce::String &) override { mainWindow.reset(new MainWindow("ProcessingAudioInputTutorial", new MainContentComponent, *this)); }
+    void initialise(const juce::String &) override { mainWindow = new MainWindow(getApplicationName(), new MainContentComponent, *this); }
 
-    void shutdown() override { mainWindow = nullptr; }
+    void shutdown() override { delete mainWindow; }
 
 private:
     class MainWindow : public juce::DocumentWindow {
@@ -32,7 +32,7 @@ private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
     };
 
-    std::unique_ptr<MainWindow> mainWindow;
+    MainWindow *mainWindow{nullptr};
 };
 
 START_JUCE_APPLICATION(Application)

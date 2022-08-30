@@ -50,7 +50,7 @@ public:
     enum ButtonType
     {
         menuButton = 0,     /**< The menu button (if it's held for a short time). */
-        playButton,         /**< The play button. */
+        playbackButton,         /**< The play button. */
         plusButton,         /**< The plus or volume-up button. */
         minusButton,        /**< The minus or volume-down button. */
         rightButton,        /**< The right button (if it's held for a short time). */
