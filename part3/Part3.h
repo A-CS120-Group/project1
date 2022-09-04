@@ -1,9 +1,11 @@
+#include "utils.h"
 #include <JuceHeader.h>
 #include <chrono>
 #pragma once
 
-#define PI 3.14159
-
+using juce::File;
+using juce::FileChooser;
+using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
@@ -12,41 +14,55 @@ using std::chrono::milliseconds;
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
-        titleLabel.setText("Part1&2", juce::NotificationType::dontSendNotification);
+        openFile = new FileChooser("Choose file to send", File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory), "*.in");
+
+        titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
         titleLabel.setFont(juce::Font(36, juce::Font::FontStyleFlags::bold));
         titleLabel.setJustificationType(juce::Justification(juce::Justification::Flags::centred));
         titleLabel.setCentrePosition(300, 40);
         addAndMakeVisible(titleLabel);
 
-        recordButton.setButtonText("Record");
+        recordButton.setButtonText("Send");
         recordButton.setSize(80, 40);
         recordButton.setCentrePosition(150, 140);
         recordButton.onClick = [this] {
-            if (this->status == 0) {
-                this->status = 1;
-                this->startTime = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-            }
+            if (status != 0) { return; }
+            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this](const FileChooser &chooser) {
+                FileInputStream inputStream(chooser.getResult());
+                if (inputStream.failedToOpen()) {
+                    return;
+                } else {
+                    // Put all information in the track
+                    juce::String inputString = inputStream.readString();
+                    track.clear();
+                    track.reserve(inputStream.getTotalLength());
+                    for (auto _: inputString) {
+                        auto nextChar = static_cast<char>(_);
+                        if (nextChar == '0') {
+                            track.push_back(false);
+                        } else if (nextChar == '1') {
+                            track.push_back(true);
+                        }
+                    }
+                    status = 1;
+                }
+            });
         };
         addAndMakeVisible(recordButton);
 
-        playbackButton.setButtonText("Play");
+        playbackButton.setButtonText("Receive");
         playbackButton.setSize(80, 40);
-        playbackButton.setCentrePosition(300, 140);
+        playbackButton.setCentrePosition(450, 140);
         playbackButton.onClick = [this] {
-            if (this->status == 2) {
-                this->status = 3;
-                this->startTime = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
+            if (status == 1) {
+                return;
+            } else if (status == 2) {
+                status = 0;
+                return;
             }
         };
         addAndMakeVisible(playbackButton);
-
-        playTune.setButtonText("Part2");
-        playTune.setSize(80, 40);
-        playTune.setCentrePosition(450, 140);
-        playTune.onClick = [this] { this->playBackGround = !this->playBackGround; };
-        addAndMakeVisible(playTune);
-
 
         setSize(600, 300);
         setAudioChannels(1, 1);
@@ -54,8 +70,9 @@ public:
 
     ~MainContentComponent() override { shutdownAudio(); }
 
+private:
     void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override {
-        this->_sampleRate = sampleRate;
+        this->_sampleRate = (int) sampleRate;
         this->delayBuffer = new juce::AudioSampleBuffer;
         this->delayBuffer->setSize(1, (int) this->getSampleRate() * 10);// 10 seconds in total
     }
@@ -69,15 +86,6 @@ public:
         auto buffer = bufferToFill.buffer;
         auto delayBufferSize = delayBuffer->getNumSamples();
         auto bufferSize = buffer->getNumSamples();
-
-        constexpr const long long recordingLength = 10 * 1000;
-        if (status == 1 && duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count() - startTime > recordingLength) {
-            status = 2;
-            startTime = 0;
-        } else if (status == 3 && duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count() - startTime > recordingLength) {
-            status = 0;
-            startTime = 0;
-        }
 
         for (auto channel = 0; channel < maxOutputChannels; ++channel) {
             if ((!activeInputChannels[channel] || !activeOutputChannels[channel]) || maxInputChannels == 0) {
@@ -93,35 +101,17 @@ public:
                     buffer->clear();
                 }
             }
-
-            if (playBackGround) {
-                auto *outBuffer = buffer->getWritePointer(channel, bufferToFill.startSample);
-                int freq1 = 1000;
-                int freq2 = 10000;
-                float amp = 1;
-                double sampleRate = this->getSampleRate();
-                float dPhasePerSample1 = PI * 2.0f * ((float) freq1 / (float) sampleRate);
-                float dPhasePerSample2 = PI * 2.0f * ((float) freq2 / (float) sampleRate);
-                float initPhase = 0;
-
-                for (int i = 0; i < buffer->getNumSamples(); i++) {
-                    outBuffer[i] += amp * sin(dPhasePerSample1 * (float) i + initPhase) + amp * sin(dPhasePerSample2 * (float) i + initPhase);
-                }
-            }
         }
 
         switch (status) {
             case 0:
-                titleLabel.setText("Part1&2", juce::NotificationType::dontSendNotification);
+                titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
                 break;
             case 1:
-                titleLabel.setText("Recording", juce::NotificationType::dontSendNotification);
+                titleLabel.setText("Sending", juce::NotificationType::dontSendNotification);
                 break;
             case 2:
-                titleLabel.setText("Recorded", juce::NotificationType::dontSendNotification);
-                break;
-            case 3:
-                titleLabel.setText("Playing", juce::NotificationType::dontSendNotification);
+                titleLabel.setText("Listening", juce::NotificationType::dontSendNotification);
                 break;
         }
     }
@@ -156,25 +146,48 @@ public:
     }
 
     void releaseResources() override {
-        this->delayBuffer->setSize(0, 0);
-        delete &this->delayBuffer;
+        delete this->delayBuffer;
+        delete this->openFile;
     }
 
-    double getSampleRate() const { return _sampleRate; }
+    int getSampleRate() const { return _sampleRate; }
+
+    void generateSignal() {
+        vector<double> t;
+        auto sampleRate = getSampleRate();
+        t.reserve(sampleRate);
+        for (int i = 0; i <= sampleRate; ++i) { t.push_back((double) i / sampleRate); }
+
+        vector<double> carrier;
+        carrier.reserve(sampleRate);
+        for (double i: t) { carrier.push_back(2 * PI * i); }
+
+        auto f = linspace(2000, 10000, 220);
+        auto temp = linspace(10000, 2000, 220);
+        f.reserve(f.size() + temp.size());
+        f.insert(std::end(f), std::begin(temp), std::end(temp));
+
+        std::vector<double> x(t.begin(), t.begin() + 440);
+        auto preamble = cumtrapz(x, f);
+
+        for (double &i: preamble) { i = sin(2 * PI * i); }
+    }
 
 private:
+    FileChooser *openFile{nullptr};
+    std::vector<bool> track;
+    double header[440]{};
+
     juce::Label titleLabel;
     juce::TextButton recordButton;
     juce::TextButton playbackButton;
-    juce::TextButton playTune;
 
-    int status{0};// 0 for not started, 1 for recording, 2 for finished recording, 3 for playing.
+    int status{0};// 0 for waiting, 1 for sending, 2 for receiving
     long long startTime{0};
-    double _sampleRate{0};
+    int _sampleRate{0};
     juce::AudioSampleBuffer *delayBuffer{nullptr};
     int writePosition{0};
     int readPosition{0};
-    bool playBackGround{false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainContentComponent)
 };

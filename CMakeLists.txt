@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.23)
 
-set(CURRENT_TARGET "Project1_Part1_2")
+set(CURRENT_TARGET "Project1_Part3")
 
 project(${CURRENT_TARGET} VERSION 0.0.1)
 
@@ -12,11 +12,22 @@ juce_add_gui_app(${CURRENT_TARGET} PRODUCT_NAME ${CURRENT_TARGET})
 
 juce_generate_juce_header(${CURRENT_TARGET})
 
-target_sources(${CURRENT_TARGET}
-        PRIVATE
-        part1&2/main.cpp
-        part1&2/Part1&2.h
-        )
+if (${CURRENT_TARGET} STREQUAL "Project1_Part1_2")
+    target_sources(${CURRENT_TARGET}
+            PRIVATE
+            part1&2/main.cpp
+            part1&2/Part1&2.h
+            )
+elseif (${CURRENT_TARGET} STREQUAL "Project1_Part3")
+    target_sources(${CURRENT_TARGET}
+            PRIVATE
+            part3/main.cpp
+            part3/Part3.h
+            part3/utils.h
+            part3/utils.cpp
+            )
+endif ()
+
 
 target_compile_definitions(${CURRENT_TARGET}
         PRIVATE
