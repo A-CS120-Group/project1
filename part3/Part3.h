@@ -171,6 +171,19 @@ private:
         auto preamble = cumtrapz(x, f);
 
         for (double &i: preamble) { i = sin(2 * PI * i); }
+
+        auto length = track.size();
+        size_t index = 0;
+        for (int i = 0; i < floor(length / 100); ++i) {
+            auto target = index + 100;
+            vector<double> frame;
+            frame.reserve(100);
+            for (; index < target; ++index) {
+                frame.push_back(track[index]);
+            }
+            // something about crc8 here
+        }
+        // The rest does not make 100 number
     }
 
 private:
