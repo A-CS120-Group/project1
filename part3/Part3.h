@@ -182,6 +182,7 @@ private:
                 frame.push_back(track[index]);
             }
             // something about crc8 here
+            auto result = crc8(track);
         }
         // The rest does not make 100 number
     }

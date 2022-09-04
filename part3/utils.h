@@ -9,3 +9,5 @@
 std::vector<double> linspace(double min, double max, int n);
 
 std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f);
+
+char crc8(const std::vector<bool> &source);
