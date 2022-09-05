@@ -17,7 +17,7 @@ std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f) {
     double total = 0.0;
     double last = *t.begin();
     result.push_back(0);
-    for (int k = 0; k < size; k++) {
+    for (int k = 0; k < size - 1; ++k) {
         double d;
         double s_tmp;
         d = t[k + 1] - t[k];

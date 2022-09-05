@@ -45,6 +45,9 @@ public:
                             track.push_back(true);
                         }
                     }
+                    generateSignal();
+                    writePosition = 0;
+                    readPosition = 0;
                     status = 1;
                 }
             });
@@ -71,11 +74,7 @@ public:
     ~MainContentComponent() override { shutdownAudio(); }
 
 private:
-    void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override {
-        this->_sampleRate = (int) sampleRate;
-        this->delayBuffer = new juce::AudioSampleBuffer;
-        this->delayBuffer->setSize(1, (int) this->getSampleRate() * 10);// 10 seconds in total
-    }
+    void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override { this->_sampleRate = (int) sampleRate; }
 
     void getNextAudioBlock(const juce::AudioSourceChannelInfo &bufferToFill) override {
         auto *device = deviceManager.getCurrentAudioDevice();
@@ -84,25 +83,27 @@ private:
         auto maxInputChannels = activeInputChannels.getHighestBit() + 1;
         auto maxOutputChannels = activeOutputChannels.getHighestBit() + 1;
         auto buffer = bufferToFill.buffer;
-        auto delayBufferSize = delayBuffer->getNumSamples();
         auto bufferSize = buffer->getNumSamples();
 
         for (auto channel = 0; channel < maxOutputChannels; ++channel) {
             if ((!activeInputChannels[channel] || !activeOutputChannels[channel]) || maxInputChannels == 0) {
                 bufferToFill.buffer->clear(channel, bufferToFill.startSample, bufferToFill.numSamples);
             } else {
-                auto channelData = buffer->getReadPointer(channel);
+                // Play sound here
                 if (status == 1) {
-                    fillBuffer(channel, bufferSize, delayBufferSize, channelData);
                     buffer->clear();
-                } else if (status == 3) {
-                    readFromBuffer(channel, bufferSize, delayBufferSize, buffer);
-                } else {
-                    buffer->clear();
+                    for (int i = 0; i < bufferSize; ++i, ++readPosition) {
+                        if (readPosition >= outputTrack.size()) {
+                            status = 0;
+                            break;
+                        }
+                        buffer->addSample(channel, i, (float) outputTrack[readPosition]);
+                    }
                 }
             }
         }
 
+        const MessageManagerLock mmLock;
         switch (status) {
             case 0:
                 titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
@@ -116,39 +117,7 @@ private:
         }
     }
 
-    void fillBuffer(int channel, int bufferSize, int delayBufferSize, const float *channelData) {
-        float gain = 1.0;
-        if (delayBufferSize > bufferSize + writePosition) {
-            delayBuffer->copyFromWithRamp(channel, writePosition, channelData, bufferSize, gain, gain);
-        } else {
-            auto numSamplesToEnd = delayBufferSize - writePosition;
-            delayBuffer->copyFromWithRamp(channel, writePosition, channelData, numSamplesToEnd, gain, gain);
-            auto numSamplesAtStart = bufferSize - numSamplesToEnd;
-            delayBuffer->copyFromWithRamp(channel, 0, channelData + numSamplesToEnd, numSamplesAtStart, gain, gain);
-        }
-        writePosition += bufferSize;
-        writePosition %= delayBufferSize;
-    }
-
-    void readFromBuffer(int channel, int bufferSize, int delayBufferSize, juce::AudioSampleBuffer *buffer) {
-        float gain = 1.0;
-        buffer->clear();
-        if (readPosition + bufferSize < delayBufferSize) {
-            buffer->addFromWithRamp(channel, 0, delayBuffer->getReadPointer(channel, (int) readPosition), bufferSize, gain, gain);
-        } else {
-            auto numSamplesToEnd = delayBufferSize - readPosition;
-            buffer->addFromWithRamp(channel, 0, delayBuffer->getReadPointer(channel, (int) readPosition), (int) numSamplesToEnd, gain, gain);
-            auto numSamplesAtStart = bufferSize - numSamplesToEnd;
-            buffer->addFromWithRamp(channel, (int) numSamplesToEnd, delayBuffer->getReadPointer(channel, 0), (int) numSamplesAtStart, gain, gain);
-        }
-        readPosition += bufferSize;
-        readPosition %= delayBufferSize;
-    }
-
-    void releaseResources() override {
-        delete this->delayBuffer;
-        delete this->openFile;
-    }
+    void releaseResources() override { delete this->openFile; }
 
     int getSampleRate() const { return _sampleRate; }
 
@@ -163,9 +132,9 @@ private:
         for (double i: t) { carrier.push_back(2 * PI * i); }
 
         auto f = linspace(2000, 10000, 220);
-        auto temp = linspace(10000, 2000, 220);
-        f.reserve(f.size() + temp.size());
-        f.insert(std::end(f), std::begin(temp), std::end(temp));
+        auto f_temp = linspace(10000, 2000, 220);
+        f.reserve(f.size() + f_temp.size());
+        f.insert(std::end(f), std::begin(f_temp), std::end(f_temp));
 
         std::vector<double> x(t.begin(), t.begin() + 440);
         auto preamble = cumtrapz(x, f);
@@ -173,23 +142,39 @@ private:
         for (double &i: preamble) { i = sin(2 * PI * i); }
 
         auto length = track.size();
+        outputTrack.clear();
+
         size_t index = 0;
         for (int i = 0; i < floor(length / 100); ++i) {
             auto target = index + 100;
             vector<double> frame;
-            frame.reserve(100);
-            for (; index < target; ++index) {
-                frame.push_back(track[index]);
-            }
-            // something about crc8 here
+            frame.reserve(108);
+            for (; index < target; ++index) { frame.push_back(track[index]); }
+
             auto result = crc8(track);
+            for (int j = 0; j < 8; ++j) {
+                frame.push_back((result & 0x80) >> 7 == 1);
+                result <<= 1;
+            }
+            // crc8 generated
+
+            for (int j = 0; j < 50; ++j) { outputTrack.push_back(0); }
+            outputTrack.insert(std::end(outputTrack), std::begin(preamble), std::end(preamble));
+
+            for (int j = 0; j < frame.size(); ++j) {
+                auto temp = frame[j] * 2 - 1;
+                for (int k = 0; k < 44; ++k) { outputTrack.push_back(carrier[k + j * 44] * temp); }
+            }
         }
+        // Just in case
+        for (int i = 0; i < 50; ++i) { outputTrack.push_back(0); }
         // The rest does not make 100 number
     }
 
 private:
     FileChooser *openFile{nullptr};
     std::vector<bool> track;
+    std::vector<double> outputTrack;
     double header[440]{};
 
     juce::Label titleLabel;
@@ -199,7 +184,6 @@ private:
     int status{0};// 0 for waiting, 1 for sending, 2 for receiving
     long long startTime{0};
     int _sampleRate{0};
-    juce::AudioSampleBuffer *delayBuffer{nullptr};
     int writePosition{0};
     int readPosition{0};
 
