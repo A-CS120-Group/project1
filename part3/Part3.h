@@ -58,12 +58,12 @@ public:
         playbackButton.setSize(80, 40);
         playbackButton.setCentrePosition(450, 140);
         playbackButton.onClick = [this] {
-            if (status == 1) {
-                return;
+            if (status == 0) {
+                status = 2;
             } else if (status == 2) {
                 status = 0;
-                return;
             }
+            return;
         };
         addAndMakeVisible(playbackButton);
 
@@ -89,7 +89,6 @@ private:
             if ((!activeInputChannels[channel] || !activeOutputChannels[channel]) || maxInputChannels == 0) {
                 bufferToFill.buffer->clear(channel, bufferToFill.startSample, bufferToFill.numSamples);
             } else {
-                // Play sound here
                 if (status == 1) {
                     buffer->clear();
                     for (int i = 0; i < bufferSize; ++i, ++readPosition) {
@@ -99,6 +98,10 @@ private:
                         }
                         buffer->addSample(channel, i, (float) outputTrack[readPosition]);
                     }
+                } else if (status == 2) {
+                    // Receive sound here
+
+                    buffer->clear();
                 }
             }
         }
@@ -184,7 +187,6 @@ private:
     int status{0};// 0 for waiting, 1 for sending, 2 for receiving
     long long startTime{0};
     int _sampleRate{0};
-    int writePosition{0};
     int readPosition{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainContentComponent)

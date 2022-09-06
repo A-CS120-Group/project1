@@ -49,3 +49,5 @@ char crc8(const std::vector<bool> &source) {
     crc8.process_bytes(sourceString, source.size() / 8);
     return (char) crc8.checksum();
 }
+
+std::vector<double> smooth(const std::vector<double>& y, int span) {}
