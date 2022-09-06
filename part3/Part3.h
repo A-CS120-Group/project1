@@ -46,7 +46,6 @@ public:
                         }
                     }
                     generateSignal();
-                    writePosition = 0;
                     readPosition = 0;
                     status = 1;
                 }
@@ -61,7 +60,7 @@ public:
             if (status == 0) {
                 status = 2;
             } else if (status == 2) {
-                status = 0;
+                status = 3;
             }
             return;
         };
@@ -100,7 +99,8 @@ private:
                     }
                 } else if (status == 2) {
                     // Receive sound here
-
+                    const float *data = buffer->getReadPointer(channel);
+                    for (int i = 0; i < bufferSize; ++i) { inputBuffer.push(*(data + i)); }
                     buffer->clear();
                 }
             }
@@ -117,7 +117,18 @@ private:
             case 2:
                 titleLabel.setText("Listening", juce::NotificationType::dontSendNotification);
                 break;
+            case 3:
+                titleLabel.setText("Processing", juce::NotificationType::dontSendNotification);
+                break;
         }
+    }
+
+    void processInput() {
+        while (!inputBuffer.empty()) {
+            // Flash! Help me!
+        }
+        // Save them in a file
+        status = 0;
     }
 
     void releaseResources() override { delete this->openFile; }
@@ -178,13 +189,14 @@ private:
     FileChooser *openFile{nullptr};
     std::vector<bool> track;
     std::vector<double> outputTrack;
+    std::queue<double> inputBuffer;
     double header[440]{};
 
     juce::Label titleLabel;
     juce::TextButton recordButton;
     juce::TextButton playbackButton;
 
-    int status{0};// 0 for waiting, 1 for sending, 2 for receiving
+    int status{0};// 0 for waiting, 1 for sending, 2 for receiving, 3 for processing
     long long startTime{0};
     int _sampleRate{0};
     int readPosition{0};
