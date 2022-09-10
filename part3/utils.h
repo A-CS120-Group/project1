@@ -12,4 +12,4 @@ std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f);
 
 char crc8(const std::vector<bool> &source);
 
-std::vector<double> smooth(const std::vector<double>& y, int span);
+std::vector<double> smooth(const std::vector<double> &y, size_t span);

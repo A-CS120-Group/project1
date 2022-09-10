@@ -50,4 +50,20 @@ char crc8(const std::vector<bool> &source) {
     return (char) crc8.checksum();
 }
 
-std::vector<double> smooth(const std::vector<double>& y, int span) {}
+std::vector<double> smooth(const std::vector<double> &y, size_t span) {
+    if (span == 0) { return y; }
+    auto size = y.size();
+    auto smoothSize = ((span - 1) | 1);
+    auto result = std::vector<double>{};
+    result.reserve(size);
+    for (size_t pos = 0; pos < size; ++pos) {
+        auto maxDistToEdge = std::min({smoothSize / 2, pos, size - pos - 1});
+        result.push_back(y[pos]);
+        for (auto i = 1; i <= maxDistToEdge; ++i) {
+            result[pos] += y[pos - i];
+            result[pos] += y[pos + i];
+        }
+        result[pos] /= (double) (maxDistToEdge * 2 + 1);
+    }
+    return result;
+}
