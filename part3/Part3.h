@@ -102,6 +102,9 @@ private:
                     const float *data = buffer->getReadPointer(channel);
                     for (int i = 0; i < bufferSize; ++i) { inputBuffer.push(*(data + i)); }
                     buffer->clear();
+                } else if (status == 3) {
+                    status = -1;
+                    processInput();
                 }
             }
         }
@@ -196,7 +199,7 @@ private:
     juce::TextButton recordButton;
     juce::TextButton playbackButton;
 
-    int status{0};// 0 for waiting, 1 for sending, 2 for receiving, 3 for processing
+    int status{0};// 0 for waiting, 1 for sending, 2 for listening, 3 for processing, -1 for waiting
     long long startTime{0};
     int _sampleRate{0};
     int readPosition{0};
