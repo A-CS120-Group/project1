@@ -42,12 +42,12 @@ static void vecBool2string(std::vector<bool> src, char *des) {
     }
 }
 
-char crc8(const std::vector<bool> &source) {
+int crc8(const std::vector<bool> &source) {
     boost::crc_basic<8> crc8{0XA7, 0X00, 0, false, false};
     auto sourceString = new char[source.size() / 8];
     vecBool2string(source, sourceString);
     crc8.process_bytes(sourceString, source.size() / 8);
-    return (char) crc8.checksum();
+    return crc8.checksum();
 }
 
 std::vector<double> smooth(const std::vector<double> &y, size_t span) {

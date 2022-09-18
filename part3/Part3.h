@@ -1,6 +1,7 @@
 #include "utils.h"
 #include <JuceHeader.h>
 #include <chrono>
+
 #pragma once
 
 using juce::File;
@@ -14,7 +15,8 @@ using std::chrono::milliseconds;
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
-        openFile = new FileChooser("Choose file to send", File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory), "*.in");
+        openFile = new FileChooser("Choose file to send",
+                                   File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory), "*.in");
 
         titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
@@ -28,28 +30,29 @@ public:
         recordButton.setCentrePosition(150, 140);
         recordButton.onClick = [this] {
             if (status != 0) { return; }
-            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this](const FileChooser &chooser) {
-                FileInputStream inputStream(chooser.getResult());
-                if (inputStream.failedToOpen()) {
-                    return;
-                } else {
-                    // Put all information in the track
-                    juce::String inputString = inputStream.readString();
-                    track.clear();
-                    track.reserve(inputStream.getTotalLength());
-                    for (auto _: inputString) {
-                        auto nextChar = static_cast<char>(_);
-                        if (nextChar == '0') {
-                            track.push_back(false);
-                        } else if (nextChar == '1') {
-                            track.push_back(true);
-                        }
-                    }
-                    generateSignal();
-                    readPosition = 0;
-                    status = 1;
-                }
-            });
+            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
+                                  [this](const FileChooser &chooser) {
+                                      FileInputStream inputStream(chooser.getResult());
+                                      if (inputStream.failedToOpen()) {
+                                          return;
+                                      } else {
+                                          // Put all information in the track
+                                          juce::String inputString = inputStream.readString();
+                                          track.clear();
+                                          track.reserve(inputStream.getTotalLength());
+                                          for (auto _: inputString) {
+                                              auto nextChar = static_cast<char>(_);
+                                              if (nextChar == '0') {
+                                                  track.push_back(false);
+                                              } else if (nextChar == '1') {
+                                                  track.push_back(true);
+                                              }
+                                          }
+                                          generateSignal();
+                                          readPosition = 0;
+                                          status = 1;
+                                      }
+                                  });
         };
         addAndMakeVisible(recordButton);
 
@@ -73,7 +76,24 @@ public:
     ~MainContentComponent() override { shutdownAudio(); }
 
 private:
-    void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override { this->_sampleRate = (int) sampleRate; }
+    void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override {
+        // initialize carrier and preamble
+        vector<double> t;
+        t.reserve((int) sampleRate);
+        for (int i = 0; i <= sampleRate; ++i) { t.push_back((double) i / sampleRate); }
+
+        carrier.reserve((int) sampleRate);
+        for (double i: t) { carrier.push_back(2 * PI * i); }
+
+        auto f = linspace(2000, 10000, 220);
+        auto f_temp = linspace(10000, 2000, 220);
+        f.reserve(f.size() + f_temp.size());
+        f.insert(std::end(f), std::begin(f_temp), std::end(f_temp));
+
+        std::vector<double> x(t.begin(), t.begin() + 440);
+        preamble = cumtrapz(x, f);
+        for (double &i: preamble) { i = sin(2 * PI * i); }
+    }
 
     void getNextAudioBlock(const juce::AudioSourceChannelInfo &bufferToFill) override {
         auto *device = deviceManager.getCurrentAudioDevice();
@@ -100,7 +120,7 @@ private:
                 } else if (status == 2) {
                     // Receive sound here
                     const float *data = buffer->getReadPointer(channel);
-                    for (int i = 0; i < bufferSize; ++i) { inputBuffer.push(*(data + i)); }
+                    for (int i = 0; i < bufferSize; ++i) { inputBuffer.push_back(*(data + i)); }
                     buffer->clear();
                 } else if (status == 3) {
                     status = -1;
@@ -127,8 +147,52 @@ private:
     }
 
     void processInput() {
-        while (!inputBuffer.empty()) {
+        double power = 0;
+        int start_index = -1;
+        std::deque<double> sync(440, 0);
+        std::vector<double> decode;
+        double syncPower_localMax = 0;
+        int state = 0; // 0 sync; 1 decode
+
+        for (int i = 0; i < inputBuffer.size(); ++i) {
             // Flash! Help me!
+            double cur = inputBuffer[i];
+            power = power * (63.0 / 64) + cur * cur / 64;
+            if (state == 0) {
+                sync.pop_front();
+                sync.push_back(cur);
+                double syncPower = std::inner_product(sync.begin(), sync.end(), preamble.begin(), 0.0);
+                if (syncPower > power * 2 && syncPower > syncPower_localMax && syncPower > 0.05) {
+                    syncPower_localMax = syncPower;
+                    start_index = i;
+                } else if (i - start_index > 200 && start_index != -1) {
+                    syncPower_localMax = 0;
+                    sync = std::deque<double>(440, 0);
+                    state = 1;
+                    decode = std::vector<double>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
+                }
+            } else {
+                decode.push_back(cur);
+                if (decode.size() == 44 * 108) {
+                    std::transform(decode.begin(), decode.end(), carrier.begin(), decode.begin(), std::multiplies<>{});
+                    decode = smooth(decode, 10);
+                    std::vector<bool> bits(108);
+                    for (int j = 0; j < 108; ++j)
+                        bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 29 + j * 44, 0.0);
+                    int check = 0;
+                    for (int j = 100; j < 108; ++j)
+                        check = (check << 1) | bits[j];
+                    bits.resize(100);
+                    if (check == crc8(bits)) {
+                        // TODO: display error
+                        assert(0);
+                    }
+                    // TODO: store result
+                    start_index = -1;
+                    decode.clear();
+                    state = 0;
+                }
+            }
         }
         // Save them in a file
         status = 0;
@@ -136,28 +200,7 @@ private:
 
     void releaseResources() override { delete this->openFile; }
 
-    int getSampleRate() const { return _sampleRate; }
-
     void generateSignal() {
-        vector<double> t;
-        auto sampleRate = getSampleRate();
-        t.reserve(sampleRate);
-        for (int i = 0; i <= sampleRate; ++i) { t.push_back((double) i / sampleRate); }
-
-        vector<double> carrier;
-        carrier.reserve(sampleRate);
-        for (double i: t) { carrier.push_back(2 * PI * i); }
-
-        auto f = linspace(2000, 10000, 220);
-        auto f_temp = linspace(10000, 2000, 220);
-        f.reserve(f.size() + f_temp.size());
-        f.insert(std::end(f), std::begin(f_temp), std::end(f_temp));
-
-        std::vector<double> x(t.begin(), t.begin() + 440);
-        auto preamble = cumtrapz(x, f);
-
-        for (double &i: preamble) { i = sin(2 * PI * i); }
-
         auto length = track.size();
         outputTrack.clear();
 
@@ -170,7 +213,7 @@ private:
 
             auto result = crc8(track);
             for (int j = 0; j < 8; ++j) {
-                frame.push_back((result & 0x80) >> 7 == 1);
+                frame.push_back((result & 0x80) >> 7);
                 result <<= 1;
             }
             // crc8 generated
@@ -192,8 +235,7 @@ private:
     FileChooser *openFile{nullptr};
     std::vector<bool> track;
     std::vector<double> outputTrack;
-    std::queue<double> inputBuffer;
-    double header[440]{};
+    std::vector<double> inputBuffer;
 
     juce::Label titleLabel;
     juce::TextButton recordButton;
@@ -201,8 +243,11 @@ private:
 
     int status{0};// 0 for waiting, 1 for sending, 2 for listening, 3 for processing, -1 for waiting
     long long startTime{0};
-    int _sampleRate{0};
     int readPosition{0};
 
+    vector<double> carrier;
+    vector<double> preamble; // preamble sequence for synchronizing
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainContentComponent)
+
 };

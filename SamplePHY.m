@@ -69,11 +69,11 @@ end
 % figure;
 % plot(output_track);
 
-
+audiowrite('sample_track.wav',output_track,44100);
 
 %% Receiver
-[soundTrack,fs] = audioread('sample_track.wav');
-% output_track = soundTrack'; 
+% [soundTrack,fs] = audioread('sample_track.wav');
+% output_track = soundTrack; 
 RxFIFO = output_track;
 
 power = 0;
