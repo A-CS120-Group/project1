@@ -147,6 +147,8 @@ private:
     }
 
     void processInput() {
+        // File file = openFile->getResult();
+        // char file_buffer[100];
         double power = 0;
         int start_index = -1;
         std::deque<double> sync(440, 0);
@@ -177,24 +179,28 @@ private:
                     std::transform(decode.begin(), decode.end(), carrier.begin(), decode.begin(), std::multiplies<>{});
                     decode = smooth(decode, 10);
                     std::vector<bool> bits(108);
-                    for (int j = 0; j < 108; ++j)
-                        bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 29 + j * 44, 0.0);
+                    for (int j = 0; j < 100; ++j) {
+                        bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0);
+                        //file_buffer[j] = bits[j] + '0';
+                    }
                     int check = 0;
                     for (int j = 100; j < 108; ++j)
-                        check = (check << 1) | bits[j];
-                    bits.resize(100);
+                        check = (check << 1) |
+                                (0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0));
                     if (check == crc8(bits)) {
                         // TODO: display error
                         assert(0);
                     }
-                    // TODO: store result
+                    // TODO: Save them in a file
+                    for (auto x: bits)
+                        std::cout << x;
                     start_index = -1;
                     decode.clear();
                     state = 0;
                 }
             }
         }
-        // Save them in a file
+        std::cout << std::endl;
         status = 0;
     }
 
