@@ -15,8 +15,7 @@ using std::chrono::milliseconds;
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
-        openFile = new FileChooser("Choose file to send",
-                                   File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory), "*.in");
+        auto openFile = new FileChooser("Choose file to send", File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory), "*.in");
 
         titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
@@ -28,31 +27,30 @@ public:
         recordButton.setButtonText("Send");
         recordButton.setSize(80, 40);
         recordButton.setCentrePosition(150, 140);
-        recordButton.onClick = [this] {
+        recordButton.onClick = [this, openFile] {
             if (status != 0) { return; }
-            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
-                                  [this](const FileChooser &chooser) {
-                                      FileInputStream inputStream(chooser.getResult());
-                                      if (inputStream.failedToOpen()) {
-                                          return;
-                                      } else {
-                                          // Put all information in the track
-                                          juce::String inputString = inputStream.readString();
-                                          track.clear();
-                                          track.reserve(inputStream.getTotalLength());
-                                          for (auto _: inputString) {
-                                              auto nextChar = static_cast<char>(_);
-                                              if (nextChar == '0') {
-                                                  track.push_back(false);
-                                              } else if (nextChar == '1') {
-                                                  track.push_back(true);
-                                              }
-                                          }
-                                          generateSignal();
-                                          readPosition = 0;
-                                          status = 1;
-                                      }
-                                  });
+            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this](const FileChooser &chooser) {
+                FileInputStream inputStream(chooser.getResult());
+                if (inputStream.failedToOpen()) {
+                    return;
+                } else {
+                    // Put all information in the track
+                    juce::String inputString = inputStream.readString();
+                    track.clear();
+                    track.reserve(inputStream.getTotalLength());
+                    for (auto _: inputString) {
+                        auto nextChar = static_cast<char>(_);
+                        if (nextChar == '0') {
+                            track.push_back(false);
+                        } else if (nextChar == '1') {
+                            track.push_back(true);
+                        }
+                    }
+                    generateSignal();
+                    readPosition = 0;
+                    status = 1;
+                }
+            });
         };
         addAndMakeVisible(recordButton);
 
@@ -147,23 +145,21 @@ private:
     }
 
     void processInput() {
-        // File file = openFile->getResult();
-        // char file_buffer[100];
         double power = 0;
         int start_index = -1;
         std::deque<double> sync(440, 0);
         std::vector<double> decode;
         double syncPower_localMax = 0;
-        int state = 0; // 0 sync; 1 decode
+        int state = 0;// 0 sync; 1 decode
+        juce::File writeTo("./" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 
         for (int i = 0; i < inputBuffer.size(); ++i) {
-            // Flash! Help me!
             double cur = inputBuffer[i];
             power = power * (63.0 / 64) + cur * cur / 64;
             if (state == 0) {
                 sync.pop_front();
                 sync.push_back(cur);
-                double syncPower = std::inner_product(sync.begin(), sync.end(), preamble.begin(), 0.0);
+                double syncPower = std::inner_product(sync.begin(), sync.end(), preamble.begin(), 0.0) / 200.0;
                 if (syncPower > power * 2 && syncPower > syncPower_localMax && syncPower > 0.05) {
                     syncPower_localMax = syncPower;
                     start_index = i;
@@ -178,22 +174,19 @@ private:
                 if (decode.size() == 44 * 108) {
                     std::transform(decode.begin(), decode.end(), carrier.begin(), decode.begin(), std::multiplies<>{});
                     decode = smooth(decode, 10);
-                    std::vector<bool> bits(108);
-                    for (int j = 0; j < 100; ++j) {
-                        bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0);
-                        //file_buffer[j] = bits[j] + '0';
-                    }
+                    std::vector<bool> bits(100);
+                    for (int j = 0; j < 100; ++j) { bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0); }
                     int check = 0;
-                    for (int j = 100; j < 108; ++j)
-                        check = (check << 1) |
-                                (0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0));
-                    if (check == crc8(bits)) {
+                    for (int j = 100; j < 108; ++j) check = (check << 1) | (0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0));
+                    if (check != crc8(bits)) {
                         // TODO: display error
-                        assert(0);
+                        std::cout << "Error" << i << "Total" << inputBuffer.size();
                     }
-                    // TODO: Save them in a file
-                    for (auto x: bits)
-                        std::cout << x;
+                    // Save in a file
+                    for (int j = 0; j < 100; ++j) {
+                        std::cout << bits[j];
+                        writeTo.appendText(bits[j] ? "1" : "0");
+                    }
                     start_index = -1;
                     decode.clear();
                     state = 0;
@@ -204,7 +197,7 @@ private:
         status = 0;
     }
 
-    void releaseResources() override { delete this->openFile; }
+    void releaseResources() override {}
 
     void generateSignal() {
         auto length = track.size();
@@ -214,10 +207,15 @@ private:
         for (int i = 0; i < floor(length / 100); ++i) {
             auto target = index + 100;
             vector<double> frame;
+            vector<bool> crcFrame;
             frame.reserve(108);
-            for (; index < target; ++index) { frame.push_back(track[index]); }
+            crcFrame.reserve(100);
+            for (; index < target; ++index) {
+                frame.push_back(track[index]);
+                crcFrame.push_back(track[index]);
+            }
 
-            auto result = crc8(track);
+            auto result = crc8(crcFrame);
             for (int j = 0; j < 8; ++j) {
                 frame.push_back((result & 0x80) >> 7);
                 result <<= 1;
@@ -235,10 +233,11 @@ private:
         // Just in case
         for (int i = 0; i < 50; ++i) { outputTrack.push_back(0); }
         // The rest does not make 100 number
+//        for (double &i: outputTrack) { inputBuffer.push_back(i); }
+//        processInput();
     }
 
 private:
-    FileChooser *openFile{nullptr};
     std::vector<bool> track;
     std::vector<double> outputTrack;
     std::vector<double> inputBuffer;
@@ -252,8 +251,7 @@ private:
     int readPosition{0};
 
     vector<double> carrier;
-    vector<double> preamble; // preamble sequence for synchronizing
+    vector<double> preamble;// preamble sequence for synchronizing
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainContentComponent)
-
 };
