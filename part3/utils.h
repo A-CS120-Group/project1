@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <functional>
+#include <cmath>
 
 #define PI acos(-1)
 

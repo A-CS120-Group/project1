@@ -78,17 +78,18 @@ private:
         // initialize carrier and preamble
         vector<double> t;
         t.reserve((int) sampleRate);
+        std::cout << sampleRate << std::endl;
         for (int i = 0; i <= sampleRate; ++i) { t.push_back((double) i / sampleRate); }
 
         carrier.reserve((int) sampleRate);
         for (double i: t) { carrier.push_back(2 * PI * i); }
 
-        auto f = linspace(2000, 10000, 220);
-        auto f_temp = linspace(10000, 2000, 220);
+        auto f = linspace(2000, 10000, 240);
+        auto f_temp = linspace(10000, 2000, 240);
         f.reserve(f.size() + f_temp.size());
         f.insert(std::end(f), std::begin(f_temp), std::end(f_temp));
 
-        std::vector<double> x(t.begin(), t.begin() + 440);
+        std::vector<double> x(t.begin(), t.begin() + 480);
         preamble = cumtrapz(x, f);
         for (double &i: preamble) { i = sin(2 * PI * i); }
     }
@@ -123,7 +124,7 @@ private:
                 } else if (status == 3) {
                     status = -1;
                     processInput();
-                }
+                } else buffer->clear();
             }
         }
 
@@ -147,7 +148,7 @@ private:
     void processInput() {
         double power = 0;
         int start_index = -1;
-        std::deque<double> sync(440, 0);
+        std::deque<double> sync(480, 0);
         std::vector<double> decode;
         double syncPower_localMax = 0;
         int state = 0;// 0 sync; 1 decode
@@ -165,19 +166,20 @@ private:
                     start_index = i;
                 } else if (i - start_index > 200 && start_index != -1) {
                     syncPower_localMax = 0;
-                    sync = std::deque<double>(440, 0);
+                    sync = std::deque<double>(480, 0);
                     state = 1;
                     decode = std::vector<double>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
+                    std::cout << "Header found" << std::endl;
                 }
             } else {
                 decode.push_back(cur);
-                if (decode.size() == 44 * 108) {
+                if (decode.size() == 48 * 108) {
                     std::transform(decode.begin(), decode.end(), carrier.begin(), decode.begin(), std::multiplies<>{});
                     decode = smooth(decode, 10);
                     std::vector<bool> bits(100);
-                    for (int j = 0; j < 100; ++j) { bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0); }
+                    for (int j = 0; j < 100; ++j) { bits[j] = 0 < std::accumulate(decode.begin() + 9 + j * 48, decode.begin() + 30 + j * 48, 0.0); }
                     int check = 0;
-                    for (int j = 100; j < 108; ++j) check = (check << 1) | (0 < std::accumulate(decode.begin() + 9 + j * 44, decode.begin() + 30 + j * 44, 0.0));
+                    for (int j = 100; j < 108; ++j) check = (check << 1) | (0 < std::accumulate(decode.begin() + 9 + j * 48, decode.begin() + 30 + j * 48, 0.0));
                     if (check != crc8(bits)) {
                         // TODO: display error
                         std::cout << "Error" << i << "Total" << inputBuffer.size();
@@ -187,6 +189,7 @@ private:
                         std::cout << bits[j];
                         writeTo.appendText(bits[j] ? "1" : "0");
                     }
+                    std::cout << std::endl;
                     start_index = -1;
                     decode.clear();
                     state = 0;
@@ -227,14 +230,14 @@ private:
 
             for (int j = 0; j < frame.size(); ++j) {
                 auto temp = frame[j] * 2 - 1;
-                for (int k = 0; k < 44; ++k) { outputTrack.push_back(carrier[k + j * 44] * temp); }
+                for (int k = 0; k < 48; ++k) { outputTrack.push_back(carrier[k + j * 44] * temp); }
             }
         }
         // Just in case
         for (int i = 0; i < 50; ++i) { outputTrack.push_back(0); }
         // The rest does not make 100 number
-//        for (double &i: outputTrack) { inputBuffer.push_back(i); }
-//        processInput();
+        for (double &i: outputTrack) { inputBuffer.push_back(i); }
+        processInput();
     }
 
 private:
