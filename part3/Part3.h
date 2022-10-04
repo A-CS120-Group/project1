@@ -153,7 +153,7 @@ private:
         std::vector<double> decode;
         double syncPower_localMax = 0;
         int state = 0;// 0 sync; 1 decode
-        juce::File writeTo("./" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
+        juce::File writeTo(R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 
         for (int i = 0; i < inputBuffer.size(); ++i) {
             double cur = inputBuffer[i];
@@ -236,8 +236,8 @@ private:
         // Just in case
         for (int i = 0; i < 50; ++i) { outputTrack.push_back(0); }
         // The rest does not make 100 number
-        for (double &i: outputTrack) { inputBuffer.push_back(i); }
-        processInput();
+//        for (double &i: outputTrack) { inputBuffer.push_back(i); }
+//        processInput();
     }
 
 private:
