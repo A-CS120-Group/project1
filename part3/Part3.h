@@ -82,7 +82,8 @@ private:
         for (int i = 0; i <= sampleRate; ++i) { t.push_back((double) i / sampleRate); }
 
         carrier.reserve((int) sampleRate);
-        for (double i: t) { carrier.push_back(2 * PI * i); }
+        for (double i: t) { carrier.push_back(sin(2 * PI * 10000 * i)); }
+//        for (double i: t) { carrier.push_back(2 * PI * i); }
 
         auto f = linspace(2000, 10000, 240);
         auto f_temp = linspace(10000, 2000, 240);
@@ -181,7 +182,6 @@ private:
                     int check = 0;
                     for (int j = 100; j < 108; ++j) check = (check << 1) | (0 < std::accumulate(decode.begin() + 9 + j * 48, decode.begin() + 30 + j * 48, 0.0));
                     if (check != crc8(bits)) {
-                        // TODO: display error
                         std::cout << "Error" << i << "Total" << inputBuffer.size();
                     }
                     // Save in a file
@@ -230,7 +230,7 @@ private:
 
             for (int j = 0; j < frame.size(); ++j) {
                 auto temp = frame[j] * 2 - 1;
-                for (int k = 0; k < 48; ++k) { outputTrack.push_back(carrier[k + j * 44] * temp); }
+                for (int k = 0; k < 48; ++k) { outputTrack.push_back(carrier[k + j * 48] * temp); }
             }
         }
         // Just in case
