@@ -59,6 +59,7 @@ public:
         playbackButton.setCentrePosition(450, 140);
         playbackButton.onClick = [this] {
             if (status == 0) {
+                inputBuffer.clear();
                 status = 2;
             } else if (status == 2) {
                 status = 3;
@@ -83,7 +84,6 @@ private:
 
         carrier.reserve((int) sampleRate);
         for (double i: t) { carrier.push_back(sin(2 * PI * 10000 * i)); }
-//        for (double i: t) { carrier.push_back(2 * PI * i); }
 
         auto f = linspace(2000, 10000, 240);
         auto f_temp = linspace(10000, 2000, 240);
@@ -153,7 +153,11 @@ private:
         std::vector<double> decode;
         double syncPower_localMax = 0;
         int state = 0;// 0 sync; 1 decode
+#ifdef WIN32
         juce::File writeTo(R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
+#else
+        juce::File writeTo(juce::File::getCurrentWorkingDirectory().getFullPathName() + juce::Time::getCurrentTime().toISO8601(false) + ".out");
+#endif
 
         for (int i = 0; i < inputBuffer.size(); ++i) {
             double cur = inputBuffer[i];
@@ -196,7 +200,7 @@ private:
                 }
             }
         }
-        std::cout << std::endl;
+        std::cout << "Finish processing!" << std::endl;
         status = 0;
     }
 

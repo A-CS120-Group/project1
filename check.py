@@ -8,5 +8,8 @@ correct = 0
 for i in range(10000):
     if b[i] == c[i]:
         correct += 1
+    else:
+        print(i)
 
+print()
 print(correct)
