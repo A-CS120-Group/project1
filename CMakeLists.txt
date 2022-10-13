@@ -4,7 +4,7 @@ set(CURRENT_TARGET "Project1_Part3")
 
 project(${CURRENT_TARGET} VERSION 0.0.1)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(JUCE)
 
