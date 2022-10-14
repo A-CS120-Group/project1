@@ -17,7 +17,7 @@ union decodeDouble {
     } field;
 };
 
-union Fixed {
+class Fixed {
 public:
     Fixed();
     explicit Fixed(int x);
@@ -30,7 +30,6 @@ public:
     Fixed operator/(int x) const;
     bool operator>(Fixed x) const;
     long long l;
-    unsigned int i[2];
 };
 
 int countLeadingZero(unsigned long long x);
@@ -39,9 +38,8 @@ int crc8(const std::vector<bool> &source);
 
 std::vector<Fixed> smooth(const std::vector<Fixed> &y, size_t span);
 
-std::string getPath(const std::string target, int depth);
+std::string getPath(std::string path, int depth);
 
+//std::vector<double> linspace(double min, double max, int n);
 
-std::vector<double> linspace(double min, double max, int n);
-
-std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f);
+//std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f);

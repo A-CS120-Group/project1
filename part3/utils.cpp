@@ -77,7 +77,7 @@ int countLeadingZero(unsigned long long x) {
     if (!(x & 0xC000000000000000))
         r += 2, x <<= 2;
     if (!(x & 0x8000000000000000))
-        r += 1, x <<= 1;
+        r += 1;
     return r;
 }
 
@@ -121,8 +121,7 @@ std::vector<Fixed> smooth(const std::vector<Fixed> &y, size_t span) {
     return result;
 }
 
-std::string getPath(const std::string target, int depth) {
-    std::string path = target;
+std::string getPath(std::string path, int depth) {
     for (int i = 0; i < depth; ++i) {
         FILE *file = fopen(path.c_str(), "r");
         if (file) {
@@ -134,32 +133,32 @@ std::string getPath(const std::string target, int depth) {
     exit(1);
 }
 
-std::vector<double> linspace(double min, double max, int n) {
-    std::vector<double> result;
-    result.reserve(n);
-    int it = 0;
-    for (double interval = (max - min) / (n - 1); it < n - 1; it++) { result.push_back(min + it * interval); }
-    result.push_back(max);
-    return result;
-}
-
-std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f) {
-    //	assert(t.size() == f.size());
-    size_t size = t.size();
-    std::vector<double> result;
-    result.reserve(size);
-    double total = 0.0;
-    double last = *t.begin();
-    result.push_back(0);
-    for (int k = 0; k < size - 1; ++k) {
-        double d;
-        double s_tmp;
-        d = t[k + 1] - t[k];
-        t[k] = d;
-        s_tmp = f[k + 1];
-        total += d * ((last + s_tmp) / 2.0);
-        last = s_tmp;
-        result.push_back(total);
-    }
-    return result;
-}
+//std::vector<double> linspace(double min, double max, int n) {
+//    std::vector<double> result;
+//    result.reserve(n);
+//    int it = 0;
+//    for (double interval = (max - min) / (n - 1); it < n - 1; it++) { result.push_back(min + it * interval); }
+//    result.push_back(max);
+//    return result;
+//}
+//
+//std::vector<double> cumtrapz(std::vector<double> t, std::vector<double> f) {
+//    //	assert(t.size() == f.size());
+//    size_t size = t.size();
+//    std::vector<double> result;
+//    result.reserve(size);
+//    double total = 0.0;
+//    double last = *t.begin();
+//    result.push_back(0);
+//    for (int k = 0; k < size - 1; ++k) {
+//        double d;
+//        double s_tmp;
+//        d = t[k + 1] - t[k];
+//        t[k] = d;
+//        s_tmp = f[k + 1];
+//        total += d * ((last + s_tmp) / 2.0);
+//        last = s_tmp;
+//        result.push_back(total);
+//    }
+//    return result;
+//}
