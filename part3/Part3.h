@@ -4,6 +4,7 @@
 #include <fstream>
 
 //#define Flash
+#define ErrorCodeCorrection
 #pragma once
 
 using juce::File;
@@ -151,12 +152,6 @@ private:
     }
 
     void processInput() {
-        Fixed power = Constants::f0;
-        int start_index = -1;
-        std::deque<Fixed> sync(480, Constants::f0);
-        std::vector<Fixed> decode;
-        Fixed syncPower_localMax = Constants::f0;
-        int state = 0;// 0 sync; 1 decode
 #ifdef Flash
         juce::File writeTo(R"(C:\Users\hujt\Desktop\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #else
@@ -167,6 +162,13 @@ private:
         juce::File writeTo(juce::File::getCurrentWorkingDirectory().getFullPathName() + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #endif
 #endif
+        track.clear();
+        Fixed power = Constants::f0;
+        int start_index = -1;
+        std::deque<Fixed> sync(480, Constants::f0);
+        std::vector<Fixed> decode;
+        Fixed syncPower_localMax = Constants::f0;
+        int state = 0;// 0 sync; 1 decode
         for (int i = 0; i < inputBuffer.size(); ++i) {
             Fixed cur(inputBuffer[i]);
             power = (power * Constants::f63 + cur * cur) * Constants::d64;
@@ -215,11 +217,8 @@ private:
                     if (check != crc8(bits)) {
                         std::cout << "Error" << i << "Total" << inputBuffer.size();
                     }
-                    // Save in a file
-                    for (int j = 0; j < 100; ++j) {
-                        std::cout << bits[j];
-                        writeTo.appendText(bits[j] ? "1" : "0");
-                    }
+                    for (auto b: bits)
+                        track.push_back(b);
                     std::cout << std::endl;
                     start_index = -1;
                     decode.clear();
@@ -227,13 +226,25 @@ private:
                 }
             }
         }
-        std::cout << "Finish processing!" << std::endl;
+        std::cout << "Finish signal decoding!" << std::endl;
+#ifdef ErrorCodeCorrection
+        hammingDecode(track);
+        std::cout << "Finish hamming decoding!" << std::endl;
+#endif
+        // Save in a file
+        for (auto b: track) {
+            std::cout << b;
+            writeTo.appendText(b ? "1" : "0");
+        }
         status = 0;
     }
 
     void releaseResources() override {}
 
     void generateSignal() {
+#ifdef ErrorCodeCorrection
+        hammingEncode(track);
+#endif
         auto length = track.size();
         outputTrack.clear();
 
@@ -241,15 +252,11 @@ private:
         for (int i = 0; i < length / 100; ++i) {
             auto target = index + 100;
             vector<bool> frame;
-            vector<bool> crcFrame;
-            frame.reserve(108);
-            crcFrame.reserve(100);
-            for (; index < target; ++index) {
+            frame.reserve(100);
+            for (; index < target; ++index)
                 frame.push_back(track[index]);
-                crcFrame.push_back(track[index]);
-            }
 
-            auto result = crc8(crcFrame);
+            auto result = crc8(frame);
             for (int j = 7; j >= 0; --j)
                 frame.push_back((result >> j) & 1);
             // crc8 generated

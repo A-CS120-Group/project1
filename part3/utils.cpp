@@ -62,7 +62,7 @@ Fixed Fixed::operator*(Fixed x) const {
 
 //Fixed Fixed::operator/(int x) const { return operator*(Fixed(1.0 / x)); }
 
-Fixed Fixed::operator-() const{
+Fixed Fixed::operator-() const {
     return Fixed(-l);
 }
 
@@ -104,6 +104,7 @@ int crc8(const std::vector<bool> &source) {
     auto sourceString = new char[source.size() / 8];
     vecBool2string(source, sourceString);
     crc8.process_bytes(sourceString, source.size() / 8);
+    delete[] sourceString;
     return crc8.checksum();
 }
 
@@ -166,3 +167,64 @@ std::string getPath(std::string path, int depth) {
 //    }
 //    return result;
 //}
+
+void hammingEncode(std::vector<bool> &track){
+    for (int i = 0; i < 16; ++i) // for the space to store the number of tail-0s
+        track.push_back(false);
+    int tail0 = TRACK_FRAME - ((track.size() - 1) % TRACK_FRAME + 1);
+    for (int i = 0; i < tail0; ++i)
+        track.push_back(false);
+    for (int i = 0; i < 16; ++i)
+        track[track.size() - 16 + i] = (tail0 >> i) & 1;
+    int n = (int) track.size();
+    std::vector<bool> hamming;
+    hamming.reserve(n / DATA_BITS * TOTAL_BITS);
+    for (int i = 0; i < n; i += TRACK_FRAME) {
+        static bool tmp[INTERVAL][DATA_BITS];
+        for (int j = 0; j < INTERVAL; ++j)
+            for (int k = 0; k < DATA_BITS; ++k)
+                tmp[j][k] = track[i + DATA_BITS * j + k];
+        for (auto x: tmp)
+            hamming.push_back(x[0] ^ x[1]);
+        for (auto x: tmp)
+            hamming.push_back(x[0] ^ x[2]);
+        for (auto x: tmp)
+            hamming.push_back(x[0]);
+        for (auto x: tmp)
+            hamming.push_back(x[1] ^ x[2]);
+        for (auto x: tmp)
+            hamming.push_back(x[1]);
+        for (auto x: tmp)
+            hamming.push_back(x[2]);
+    }
+    std::swap(track, hamming);
+}
+
+void hammingDecode(std::vector<bool> &hamming){
+    int n = (int) hamming.size();
+    assert(hamming.size() % HAMMING_FRAME == 0);
+    std::vector<bool> track;
+    track.reserve(n / TOTAL_BITS * DATA_BITS);
+    for (int i = 0; i < n; i += HAMMING_FRAME) {
+        for (int j = 0; j < INTERVAL; ++j) {
+            static bool tmp[TOTAL_BITS + 1];
+            for (int k = 0; k < TOTAL_BITS; ++k)
+                tmp[k + 1] = hamming[i + k * INTERVAL + j];
+            int check1 = tmp[1] ^ tmp[3] ^ tmp[5];
+            int check2 = tmp[2] ^ tmp[3] ^ tmp[6];
+            int check4 = tmp[4] ^ tmp[5] ^ tmp[6];
+            int err = check1 + (check2 << 1) + (check4 << 2);
+            assert(err <= TOTAL_BITS);
+            tmp[err] ^= 1;
+            track.push_back(tmp[3]);
+            track.push_back(tmp[5]);
+            track.push_back(tmp[6]);
+        }
+    }
+    int tail0 = 0;
+    for (int i = 0; i < 16; ++i)
+        tail0 |= (int) track[track.size() - 16 + i] << i;
+    for (int k = tail0 + 16; k--;)
+        track.pop_back();
+    std::swap(track, hamming);
+}
