@@ -27,7 +27,8 @@ public:
     Fixed operator+(Fixed x) const;
     Fixed operator-(Fixed x) const;
     Fixed operator*(Fixed x) const;
-    Fixed operator/(int x) const;
+    //Fixed operator/(int x) const;
+    Fixed operator-() const;
     bool operator>(Fixed x) const;
     long long l;
 };

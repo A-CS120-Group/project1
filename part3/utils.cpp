@@ -60,7 +60,11 @@ Fixed Fixed::operator*(Fixed x) const {
     return Fixed((l < 0) == (x.l < 0) ? r : -r);
 }
 
-Fixed Fixed::operator/(int x) const { return operator*(Fixed(1.0 / x)); }
+//Fixed Fixed::operator/(int x) const { return operator*(Fixed(1.0 / x)); }
+
+Fixed Fixed::operator-() const{
+    return Fixed(-l);
+}
 
 bool Fixed::operator>(Fixed x) const { return operator-(x).l > 0; }
 
@@ -116,7 +120,7 @@ std::vector<Fixed> smooth(const std::vector<Fixed> &y, size_t span) {
         result.push_back(y[pos]);
         for (int i = 1; i <= maxDistToEdge; ++i)
             result[pos] = result[pos] + y[pos - i] + y[pos + i];
-        result[pos] = result[pos] / (maxDistToEdge * 2 + 1);
+        result[pos] = result[pos] * Fixed(1.0 / (maxDistToEdge * 2 + 1));
     }
     return result;
 }

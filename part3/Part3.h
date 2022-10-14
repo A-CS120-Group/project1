@@ -13,6 +13,14 @@ using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
+namespace Constants {
+    const Fixed f0 = Fixed(0);
+    const Fixed f2 = Fixed(2);
+    const Fixed f63 = Fixed(63);
+    const Fixed d20 = Fixed(1.0 / 20);
+    const Fixed d64 = Fixed(1.0 / 64);
+    const Fixed d200 = Fixed(1.0 / 200);
+}
 
 class MainContentComponent : public juce::AudioAppComponent {
 public:
@@ -80,7 +88,7 @@ public:
     ~MainContentComponent() override { shutdownAudio(); }
 
 private:
-    void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override {
+    void prepareToPlay([[maybe_unused]]int samplesPerBlockExpected, [[maybe_unused]]double sampleRate) override {
         std::ifstream file(getPath("part3/carrier.dat", 5));
         for (auto &x: carrier)
             file >> x.l;
@@ -111,12 +119,12 @@ private:
                             status = 0;
                             break;
                         }
-                        buffer->addSample(channel, i, (float) outputTrack[readPosition]);
+                        buffer->addSample(channel, i, (float) outputTrack[readPosition].to_double());
                     }
                 } else if (status == 2) {
                     // Receive sound here
                     const float *data = buffer->getReadPointer(channel);
-                    for (int i = 0; i < bufferSize; ++i) { inputBuffer.push_back(*(data + i)); }
+                    for (int i = 0; i < bufferSize; ++i) { inputBuffer.emplace_back(Fixed((double) data[i])); }
                     buffer->clear();
                 } else if (status == 3) {
                     status = -1;
@@ -143,40 +151,41 @@ private:
     }
 
     void processInput() {
-        Fixed power(0);
+        Fixed power = Constants::f0;
         int start_index = -1;
-        std::deque<Fixed> sync(480, Fixed(0));
+        std::deque<Fixed> sync(480, Constants::f0);
         std::vector<Fixed> decode;
-        Fixed syncPower_localMax(0);
+        Fixed syncPower_localMax = Constants::f0;
         int state = 0;// 0 sync; 1 decode
 #ifdef Flash
         juce::File writeTo(R"(C:\Users\hujt\Desktop\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #else
 #ifdef WIN32
-        juce::File writeTo(R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
+        juce::File writeTo(
+                R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #else
         juce::File writeTo(juce::File::getCurrentWorkingDirectory().getFullPathName() + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #endif
 #endif
         for (int i = 0; i < inputBuffer.size(); ++i) {
             Fixed cur(inputBuffer[i]);
-            power = (power * Fixed(63) + cur * cur) / 64;
+            power = (power * Constants::f63 + cur * cur) * Constants::d64;
             if (state == 0) {
                 sync.pop_front();
                 sync.push_back(cur);
-                Fixed syncPower(0);
+                Fixed syncPower = Constants::f0;
                 const Fixed *ptr = preamble;
                 for (auto x: sync) {
                     syncPower = syncPower + *ptr * x;
                     ++ptr;
                 }
-                syncPower = syncPower / 200;
-                if (syncPower > power * Fixed(2) && syncPower > syncPower_localMax && syncPower > Fixed(0.05)) {
+                syncPower = syncPower * Constants::d200;
+                if (syncPower > power * Constants::f2 && syncPower > syncPower_localMax && syncPower > Constants::d20) {
                     syncPower_localMax = syncPower;
                     start_index = i;
                 } else if (i - start_index > 200 && start_index != -1) {
-                    syncPower_localMax = Fixed(0);
-                    sync = std::deque<Fixed>(480, Fixed(0));
+                    syncPower_localMax = Constants::f0;
+                    sync = std::deque<Fixed>(480, Constants::f0);
                     state = 1;
                     decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
                     std::cout << "Header found" << std::endl;
@@ -193,11 +202,11 @@ private:
                     std::vector<bool> bits(100);
                     int check = 0;
                     for (int j = 0; j < 108; ++j) {
-                        Fixed sum(0);
+                        Fixed sum = Constants::f0;
                         auto iter = decode.begin() + 9 + j * 48, iterEnd = decode.begin() + 30 + j * 48;
                         for (; iter != iterEnd; ++iter)
                             sum = sum + *iter;
-                        bool curBit = sum > Fixed(0);
+                        bool curBit = sum > Constants::f0;
                         if (j < 100)
                             bits[j] = curBit;
                         else
@@ -246,25 +255,29 @@ private:
             // crc8 generated
 
             for (int j = 0; j < 50; ++j)
-                outputTrack.push_back(0);
+                outputTrack.emplace_back(Constants::f0);
             for (auto x: preamble)
-                outputTrack.push_back(x.to_double());
+                outputTrack.push_back(x);
 
             for (int j = 0; j < frame.size(); ++j) {
-                Fixed temp((int) frame[j] * 2 - 1);
-                for (int k = 0; k < 48; ++k)
-                    outputTrack.push_back((carrier[k + j * 48] * temp).to_double());
+                if (frame[j]) {
+                    for (int k = 0; k < 48; ++k)
+                        outputTrack.emplace_back(carrier[k + j * 48]);
+                } else {
+                    for (int k = 0; k < 48; ++k)
+                        outputTrack.emplace_back(-carrier[k + j * 48]);
+                }
             }
         }
         // Just in case
-        for (int i = 0; i < 50; ++i) { outputTrack.push_back(0); }
+        for (int i = 0; i < 50; ++i) { outputTrack.emplace_back(Constants::f0); }
         // The rest does not make 100 number
     }
 
 private:
     std::vector<bool> track;
-    std::vector<double> outputTrack;
-    std::vector<double> inputBuffer;
+    std::vector<Fixed> outputTrack;
+    std::vector<Fixed> inputBuffer;
 
     juce::Label titleLabel;
     juce::TextButton recordButton;
