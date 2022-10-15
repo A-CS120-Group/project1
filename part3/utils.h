@@ -11,12 +11,11 @@
 #define INTERVAL 100
 #define TRACK_FRAME (INTERVAL*DATA_BITS)
 #define HAMMING_FRAME (INTERVAL*TOTAL_BITS)
+#define POINT 48
 
 union decodeDouble {
     decodeDouble();
-
     explicit decodeDouble(double x);
-
     double num;
     struct {
         unsigned long long mantissa: 52;
@@ -28,26 +27,16 @@ union decodeDouble {
 class Fixed {
 public:
     Fixed();
-
     explicit Fixed(int x);
-
     explicit Fixed(long long x);
-
     explicit Fixed(double x);
-
     [[nodiscard]] double to_double() const;
-
     Fixed operator+(Fixed x) const;
-
     Fixed operator-(Fixed x) const;
-
     Fixed operator*(Fixed x) const;
-
-    //Fixed operator/(int x) const;
+    Fixed operator/(int x) const;
     Fixed operator-() const;
-
     bool operator>(Fixed x) const;
-
     long long l;
 };
 

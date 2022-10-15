@@ -6,7 +6,7 @@ decodeDouble::decodeDouble(double x) : num(x) {}
 
 Fixed::Fixed() : l() {}
 
-Fixed::Fixed(int x) : l((long long) x << 32) {}
+Fixed::Fixed(int x) : l((long long) x << POINT) {}
 
 Fixed::Fixed(long long x) : l(x) {}
 
@@ -17,7 +17,7 @@ Fixed::Fixed(double x) : l() {
         return;
     }
     unsigned long long xv = (1uLL << 52) | xd.field.mantissa;
-    int shift = (int) (xd.field.exponent) - 1043;
+    int shift = (int) (xd.field.exponent) - (1023+52-POINT);
     if (shift <= -64 || shift >= 64) {
         l = 0;
         return;
@@ -41,13 +41,17 @@ double Fixed::to_double() const {
         xd.field.mantissa = 0;
     else
         xd.field.mantissa = shift > 0 ? lv >> shift : lv << -shift;
-    xd.field.exponent = shift + 1043;
+    xd.field.exponent = shift + (1023+52-POINT);
     return xd.num;
 }
 
-Fixed Fixed::operator+(Fixed x) const { return Fixed(l + x.l); }
+Fixed Fixed::operator+(Fixed x) const {
+    return Fixed(l + x.l);
+}
 
-Fixed Fixed::operator-(Fixed x) const { return Fixed(l - x.l); }
+Fixed Fixed::operator-(Fixed x) const {
+    return Fixed(l - x.l);
+}
 
 Fixed Fixed::operator*(Fixed x) const {
     long long al = l < 0 ? -l : l;
@@ -56,17 +60,21 @@ Fixed Fixed::operator*(Fixed x) const {
     long long bh = bl >> 32;
     al &= 0xffffffffLL;
     bl &= 0xffffffffLL;
-    long long r = ((al * bl) >> 32) + al * bh + ah * bl + ((ah * bh) << 32);
+    long long r = ((al * bl) >> POINT) + ((al * bh + ah * bl)>>(POINT-32)) + ((ah * bh) << (64-POINT));
     return Fixed((l < 0) == (x.l < 0) ? r : -r);
 }
 
-//Fixed Fixed::operator/(int x) const { return operator*(Fixed(1.0 / x)); }
+Fixed Fixed::operator/(int x) const {
+    return Fixed(l / x);
+}
 
 Fixed Fixed::operator-() const {
     return Fixed(-l);
 }
 
-bool Fixed::operator>(Fixed x) const { return operator-(x).l > 0; }
+bool Fixed::operator>(Fixed x) const {
+    return operator-(x).l > 0;
+}
 
 int countLeadingZero(unsigned long long x) {
     int r = 0;
@@ -168,7 +176,7 @@ std::string getPath(std::string path, int depth) {
 //    return result;
 //}
 
-void hammingEncode(std::vector<bool> &track){
+void hammingEncode(std::vector<bool> &track) {
     for (int i = 0; i < 16; ++i) // for the space to store the number of tail-0s
         track.push_back(false);
     int tail0 = TRACK_FRAME - ((track.size() - 1) % TRACK_FRAME + 1);
@@ -200,7 +208,7 @@ void hammingEncode(std::vector<bool> &track){
     std::swap(track, hamming);
 }
 
-void hammingDecode(std::vector<bool> &hamming){
+void hammingDecode(std::vector<bool> &hamming) {
     int n = (int) hamming.size();
     assert(hamming.size() % HAMMING_FRAME == 0);
     std::vector<bool> track;

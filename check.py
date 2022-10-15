@@ -1,4 +1,5 @@
-a = input()
+# a = input()
+a = 'output.out'
 with open("input.in") as input_file:
     with open(a) as output_file:
         b = input_file.read()
@@ -9,7 +10,7 @@ for i in range(10000):
     if b[i] == c[i]:
         correct += 1
     else:
-        print(i)
+        #print(i)
+        pass
 
-print()
 print(correct)
