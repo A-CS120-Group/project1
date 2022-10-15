@@ -3,7 +3,7 @@
 #include <chrono>
 #include <fstream>
 
-#define Flash
+//#define Flash
 #define ErrorCodeCorrection
 #pragma once
 
@@ -240,84 +240,6 @@ private:
         status = 0;
     }
 
-//
-//    void processInput() {
-//        double power = 0;
-//        int start_index = -1;
-//        std::deque<double> sync(480, 0);
-//        std::vector<Fixed> decode;
-//        double syncPower_localMax = 0;
-//        int state = 0;// 0 sync; 1 decode
-//        juce::File writeTo(R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)");
-//
-//        inputBuffer = outputTrack;
-//        for (int i = 0; i < inputBuffer.size(); ++i) {
-//            double cur = inputBuffer[i].to_double();
-//            power = power * (63.0 / 64) + cur * cur / 64;
-//            if (state == 0) {
-//                sync.pop_front();
-//                sync.push_back(cur);
-//                double syncPower = 0;
-//                const Fixed *ptr = preamble;
-//                for (auto x: sync) {
-//                    syncPower = syncPower + ptr->to_double() * x;
-//                    ++ptr;
-//                }
-//                syncPower = syncPower / 200.0;
-//                std::cout<<"power="<<power<<'\n';
-//                std::cout<<"syncPower="<<syncPower<<'\n';
-//                std::cout<<"syncPower_localMax="<<syncPower_localMax<<'\n';
-//                if (syncPower > power * 2 && syncPower > syncPower_localMax && syncPower > 0.05) {
-//                    syncPower_localMax = syncPower;
-//                    start_index = i;
-//                } else if (i - start_index > 200 && start_index != -1) {
-//                    syncPower_localMax = 0;
-//                    sync = std::deque<double>(480, 0);
-//                    state = 1;
-//                    decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
-//                    std::cout << "Header found " << start_index<<' '<<i<<std::endl;
-//                }
-//            } else {
-//                exit(0);
-//                decode.push_back(Fixed(cur));
-//                if (decode.size() == 48 * 108) {
-//                    for(int i=0;i<100;++i)
-//                        std::cout << decode[i].to_double() << '\n';
-//
-//                    const Fixed *ptr = carrier;
-//                    for (auto &x: decode) {
-//                        x = x * *ptr;
-//                        ++ptr;
-//                    }
-//                    decode = smooth(decode, 10);
-//                    std::vector<double> dddd;
-//                    for(auto x:decode)
-//                        dddd.push_back(x.to_double());
-//                    std::vector<bool> bits(100);
-//                    for (int j = 0; j < 100; ++j) {
-//                        bits[j] = 0 < std::accumulate(dddd.begin() + 9 + j * 48, dddd.begin() + 30 + j * 48, 0.0);
-//                    }
-//                    int check = 0;
-//                    for (int j = 100; j < 108; ++j) check = (check << 1) | (0 < std::accumulate(dddd.begin() + 9 + j * 48, dddd.begin() + 30 + j * 48, 0.0));
-//                    if (check != crc8(bits)) {
-//                        std::cout << "Error" << i << "Total" << inputBuffer.size();
-//                    }
-//                    // Save in a file
-//                    for (int j = 0; j < 100; ++j) {
-//                        std::cout << bits[j];
-//                        writeTo.appendText(bits[j] ? "1" : "0");
-//                    }
-//                    std::cout << std::endl;
-//                    start_index = -1;
-//                    decode.clear();
-//                    state = 0;
-//                }
-//            }
-//        }
-//        std::cout << std::endl;
-//        status = 0;
-//    }
-
 
     void releaseResources() override {}
 
@@ -360,44 +282,6 @@ private:
         for (int i = 0; i < 50; ++i) { outputTrack.emplace_back(Constants::f0); }
         // The rest does not make 100 number
     }
-
-//    void generateSignal() {
-//        auto length = track.size();
-//        outputTrack.clear();
-//
-//        size_t index = 0;
-//        for (int i = 0; i < floor(length / 100); ++i) {
-//            auto target = index + 100;
-//            vector<double> frame;
-//            vector<bool> crcFrame;
-//            frame.reserve(108);
-//            crcFrame.reserve(100);
-//            for (; index < target; ++index) {
-//                frame.push_back(track[index]);
-//                crcFrame.push_back(track[index]);
-//            }
-//
-//            auto result = crc8(crcFrame);
-//            for (int j = 0; j < 8; ++j) {
-//                frame.push_back((result & 0x80) >> 7);
-//                result <<= 1;
-//            }
-//            // crc8 generated
-//
-//            for (int j = 0; j < 50; ++j) { outputTrack.push_back(Fixed(0)); }
-//            outputTrack.insert(std::end(outputTrack), std::begin(preamble), std::end(preamble));
-//
-//            for (int j = 0; j < frame.size(); ++j) {
-//                auto temp = frame[j] * 2 - 1;
-//                for (int k = 0; k < 48; ++k) { outputTrack.push_back(carrier[k + j * 48] * Fixed(temp)); }
-//            }
-//        }
-//        // Just in case
-//        for (int i = 0; i < 50; ++i) { outputTrack.push_back(Fixed(0)); }
-//        // The rest does not make 100 number
-////        for (double &i: outputTrack) { inputBuffer.push_back(i); }
-////        processInput();
-//    }
 
 private:
     std::vector<bool> track;
