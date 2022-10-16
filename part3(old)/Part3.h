@@ -4,6 +4,7 @@
 #include <fstream>
 
 #define Flash
+#define ErrorCodeCorrection
 #pragma once
 
 using juce::File;
@@ -13,15 +14,10 @@ using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
-const int colTrack = 100;
-const int rowTrack = 100;
-const int colOutput = colTrack + CRCL;
-const int rowOutput = rowTrack + CRCL;
-
-void vecOutput(vector<bool> a) {
-    for (auto x: a)
-        std::cerr << x;
-    std::cerr << '\n';
+namespace Constants {
+    const Fixed f0 = Fixed(0);
+    const Fixed f2 = Fixed(2);
+    const Fixed f63 = Fixed(63);
 }
 
 class MainContentComponent : public juce::AudioAppComponent {
@@ -153,127 +149,8 @@ private:
     }
 
     void processInput() {
-        inputBuffer = outputTrack;
-        vector<int> rowError;
-        vector<bool> output(rowOutput * colOutput);
-        ECC ecc;
-        int iFrame = 0;
-
-        Fixed power = Fixed(0);
-        int start_index = -1;
-        std::deque<Fixed> sync(480, Fixed(0));
-        std::vector<Fixed> decode;
-        Fixed syncPower_localMax = Fixed(0);
-        int state = 0;// 0 sync; 1 decode
-        for (int iPos = 0; iPos < inputBuffer.size(); ++iPos) {
-            Fixed cur(inputBuffer[iPos]);
-            power = power * Fixed(63) / 64 + cur * cur / 64;
-            if (state == 0) {
-                sync.pop_front();
-                sync.push_back(cur);
-                Fixed syncPower = Fixed(0);
-                const Fixed *ptr = preamble;
-                for (auto x: sync) {
-                    syncPower = syncPower + *ptr * x;
-                    ++ptr;
-                }
-                syncPower = syncPower / 200;
-                if (syncPower > power * Fixed(2) && syncPower > syncPower_localMax && syncPower > Fixed(1) / 20) {
-                    syncPower_localMax = syncPower;
-                    start_index = iPos;
-                } else if (iPos - start_index > 200 && start_index != -1) {
-                    syncPower_localMax = Fixed(0);
-                    sync = std::deque<Fixed>(480, Fixed(0));
-                    state = 1;
-                    decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + iPos + 1);
-                    //std::cerr << "Header found " << start_index << ' ' << iPos << std::endl;
-                }
-            } else {
-                decode.push_back(cur);
-                if (decode.size() == 48 * colOutput) {
-                    const Fixed *ptr = carrier;
-                    for (auto &x: decode) {
-                        x = x * *ptr;
-                        ++ptr;
-                    }
-                    decode = smooth(decode, 10);
-                    std::vector<bool> frame(colOutput);
-                    for (int j = 0; j < colOutput; ++j) {
-                        Fixed sum = Fixed(0);
-                        auto iter = decode.begin() + 8 + j * 48, iterEnd = decode.begin() + 40 + j * 48;
-                        for (; iter != iterEnd; ++iter)
-                            sum = sum + *iter;
-                        frame[j] = sum > Fixed(0);
-                    }
-//                    if (iFrame == 0) {
-//                        for (int j = 63; j < colOutput; ++j)
-//                            frame[j].flip();
-//                    }
-//                    if (iFrame == 1) {
-//                        for (int j = 0; j < 56; ++j)
-//                            frame[j].flip();
-//                    }
-//                    if (iFrame == 43) {
-//                        frame[14].flip();
-//                        frame[63].flip();
-//                        frame[98].flip();
-//                    }
-                    if (!crcCheck<CRCL>(frame)) {
-                        std::cerr << "Row Error " << iFrame << '\n';
-                        ecc.search(frame, 0, 2);
-                        if (ecc.res.empty())
-                            rowError.push_back(iFrame);
-                        else {
-                            std::cerr << "Row Error " << iFrame << " corrected in the first step!\n";
-                            assert(ecc.res.size() == 1);
-                            frame = ecc.res[0].code;
-                        }
-                    }
-                    for (int j = 0; j < colOutput; ++j)
-                        output[iFrame * colOutput + j] = frame[j];
-                    start_index = -1;
-                    decode.clear();
-                    state = 0;
-                    ++iFrame;
-                }
-            }
-        }
-        assert(iFrame <= rowOutput);
-        vector<vector<bool>> colFrame(colTrack);
-        vector<vector<ECCResult>> colRes(colTrack);
-        std::map<vector<int>, int> posMissingCount;
-        for (int j = 0; j < colTrack; ++j) {
-            colFrame[j].resize(iFrame);
-            for (int i = 0; i < iFrame; ++i)
-                colFrame[j][i] = output[i * colOutput + j];
-            ecc.search(colFrame[j], rowOutput - iFrame, (int) rowError.size(), rowError);
-            colRes[j] = ecc.res;
-            if (!crcCheck<CRCL>(colFrame[j]))
-                std::cerr << "Col Error " << j << " found " << colRes[j].size() << " possible solutions\n";
-            for (const auto &x: colRes[j])
-                posMissingCount.insert({x.posMissing, 0}).first->second += 1;
-        }
-        vector<vector<int>> posMissing;
-        for (const auto &x: posMissingCount)
-            if (x.second == colTrack)
-                posMissing.push_back(x.first);
-        assert(posMissing.size() == 1);
-        for (int j = 0; j < colTrack; ++j) {
-            int minHamming = INT_MAX;
-            for (auto &res: colRes[j])
-                if (std::equal(res.posMissing.begin(), res.posMissing.end(), posMissing[0].begin()) &&
-                    minHamming > res.hammingDistance) {
-                    minHamming = res.hammingDistance;
-                    colFrame[j] = res.code;
-                }
-            assert(minHamming != INT_MAX);
-        }
-        std::cout << "Finish signal decoding!" << std::endl;
-        // Save in a file
 #ifdef Flash
-#define FName R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
-        assert(remove(FName) == 0);
-        juce::File writeTo(FName);
+        juce::File writeTo(R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)");
 #else
 #ifdef WIN32
         juce::File writeTo(
@@ -282,45 +159,194 @@ private:
         juce::File writeTo(juce::File::getCurrentWorkingDirectory().getFullPathName() + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #endif
 #endif
-        for (int i = 0; i < rowTrack; ++i) {
-            for (int j = 0; j < colTrack; ++j) {
-                writeTo.appendText(colFrame[j][i] ? "1" : "0");
+        inputBuffer = outputTrack;
+        track.clear();
+        Fixed power = Constants::f0;
+        int start_index = -1;
+        std::deque<Fixed> sync(480, Constants::f0);
+        std::vector<Fixed> decode;
+        Fixed syncPower_localMax = Constants::f0;
+        int state = 0;// 0 sync; 1 decode
+        for (int i = 0; i < inputBuffer.size(); ++i) {
+            Fixed cur(inputBuffer[i]);
+            power = power * Constants::f63 / 64 + cur * cur / 64;
+            if (state == 0) {
+                sync.pop_front();
+                sync.push_back(cur);
+                Fixed syncPower = Constants::f0;
+                const Fixed *ptr = preamble;
+                for (auto x: sync) {
+                    syncPower = syncPower + *ptr * x;
+                    ++ptr;
+                }
+                syncPower = syncPower / 200;
+//                std::cout<<"power="<<power.to_double()<<'\n';
+//                std::cout<<"syncPower="<<syncPower.to_double()<<'\n';
+//                std::cout<<"syncPower_localMax="<<syncPower_localMax.to_double()<<'\n';
+                if (syncPower > power * Constants::f2 && syncPower > syncPower_localMax && syncPower > Fixed(1) / 20) {
+                    syncPower_localMax = syncPower;
+                    start_index = i;
+                } else if (i - start_index > 200 && start_index != -1) {
+                    syncPower_localMax = Constants::f0;
+                    sync = std::deque<Fixed>(480, Constants::f0);
+                    state = 1;
+                    decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
+                    std::cout << "Header found " << start_index<<' '<<i<<std::endl;
+                }
+            } else {
+                decode.push_back(cur);
+                if (decode.size() == 48 * 108) {
+                    const Fixed *ptr = carrier;
+                    for (auto &x: decode) {
+                        x = x * *ptr;
+                        ++ptr;
+                    }
+                    decode = smooth(decode, 10);
+                    std::vector<bool> bits(100);
+                    int check = 0;
+                    for (int j = 0; j < 108; ++j) {
+                        Fixed sum = Constants::f0;
+                        auto iter = decode.begin() + 8 + j * 48, iterEnd = decode.begin() + 40 + j * 48;
+                        for (; iter != iterEnd; ++iter)
+                            sum = sum + *iter;
+                        bool curBit = sum > Constants::f0;
+                        if (j < 100)
+                            bits[j] = curBit;
+                        else
+                            check = (check << 1) | (int) curBit;
+                    }
+                    if (check != crc8(bits)) {
+                        std::cout << "Error" << i << "Total" << inputBuffer.size();
+                    }
+                    for (auto b: bits)
+                        track.push_back(b);
+                    std::cout << std::endl;
+                    start_index = -1;
+                    decode.clear();
+                    state = 0;
+                }
             }
+        }
+        std::cout << "Finish signal decoding!" << std::endl;
+#ifdef ErrorCodeCorrection
+        hammingDecode(track);
+        std::cout << "Finish hamming decoding!" << std::endl;
+#endif
+        // Save in a file
+        for (auto b: track) {
+            std::cout << b;
+            writeTo.appendText(b ? "1" : "0");
         }
         status = 0;
     }
 
+//
+//    void processInput() {
+//        double power = 0;
+//        int start_index = -1;
+//        std::deque<double> sync(480, 0);
+//        std::vector<Fixed> decode;
+//        double syncPower_localMax = 0;
+//        int state = 0;// 0 sync; 1 decode
+//        juce::File writeTo(R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)");
+//
+//        inputBuffer = outputTrack;
+//        for (int i = 0; i < inputBuffer.size(); ++i) {
+//            double cur = inputBuffer[i].to_double();
+//            power = power * (63.0 / 64) + cur * cur / 64;
+//            if (state == 0) {
+//                sync.pop_front();
+//                sync.push_back(cur);
+//                double syncPower = 0;
+//                const Fixed *ptr = preamble;
+//                for (auto x: sync) {
+//                    syncPower = syncPower + ptr->to_double() * x;
+//                    ++ptr;
+//                }
+//                syncPower = syncPower / 200.0;
+//                std::cout<<"power="<<power<<'\n';
+//                std::cout<<"syncPower="<<syncPower<<'\n';
+//                std::cout<<"syncPower_localMax="<<syncPower_localMax<<'\n';
+//                if (syncPower > power * 2 && syncPower > syncPower_localMax && syncPower > 0.05) {
+//                    syncPower_localMax = syncPower;
+//                    start_index = i;
+//                } else if (i - start_index > 200 && start_index != -1) {
+//                    syncPower_localMax = 0;
+//                    sync = std::deque<double>(480, 0);
+//                    state = 1;
+//                    decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
+//                    std::cout << "Header found " << start_index<<' '<<i<<std::endl;
+//                }
+//            } else {
+//                exit(0);
+//                decode.push_back(Fixed(cur));
+//                if (decode.size() == 48 * 108) {
+//                    for(int i=0;i<100;++i)
+//                        std::cout << decode[i].to_double() << '\n';
+//
+//                    const Fixed *ptr = carrier;
+//                    for (auto &x: decode) {
+//                        x = x * *ptr;
+//                        ++ptr;
+//                    }
+//                    decode = smooth(decode, 10);
+//                    std::vector<double> dddd;
+//                    for(auto x:decode)
+//                        dddd.push_back(x.to_double());
+//                    std::vector<bool> bits(100);
+//                    for (int j = 0; j < 100; ++j) {
+//                        bits[j] = 0 < std::accumulate(dddd.begin() + 9 + j * 48, dddd.begin() + 30 + j * 48, 0.0);
+//                    }
+//                    int check = 0;
+//                    for (int j = 100; j < 108; ++j) check = (check << 1) | (0 < std::accumulate(dddd.begin() + 9 + j * 48, dddd.begin() + 30 + j * 48, 0.0));
+//                    if (check != crc8(bits)) {
+//                        std::cout << "Error" << i << "Total" << inputBuffer.size();
+//                    }
+//                    // Save in a file
+//                    for (int j = 0; j < 100; ++j) {
+//                        std::cout << bits[j];
+//                        writeTo.appendText(bits[j] ? "1" : "0");
+//                    }
+//                    std::cout << std::endl;
+//                    start_index = -1;
+//                    decode.clear();
+//                    state = 0;
+//                }
+//            }
+//        }
+//        std::cout << std::endl;
+//        status = 0;
+//    }
+
+
     void releaseResources() override {}
 
     void generateSignal() {
+#ifdef ErrorCodeCorrection
+        hammingEncode(track);
+#endif
+        auto length = track.size();
         outputTrack.clear();
-        vector<unsigned int> colCRC(colTrack);
-        for (int j = 0; j < colTrack; ++j) {
-            vector<bool> frame(rowTrack);
-            for (int i = 0; i < rowTrack; ++i)
-                frame[i] = track[i * colTrack + j];
-            colCRC[j] = crc<CRCL>(frame);
-        }
 
-        for (int i = 0; i < rowOutput; ++i) {
+        size_t index = 0;
+        for (int i = 0; i < length / 100; ++i) {
+            auto target = index + 100;
             vector<bool> frame;
-            frame.reserve(colOutput);
-            if (i < rowTrack) {
-                for (int j = 0; j < colTrack; ++j)
-                    frame.push_back(track[i * colTrack + j]);
-            } else {
-                for (int j = 0; j < colTrack; ++j)
-                    frame.push_back((colCRC[j] >> (CRCL - 1 - (i - rowTrack))) & 1);
-            }
-            auto rowCRC = crc<CRCL>(frame);
-            for (int j = 0; j < CRCL; ++j)
-                frame.push_back((rowCRC >> (CRCL - 1 - j)) & 1);
-            // crc generated
+            frame.reserve(100);
+            for (; index < target; ++index)
+                frame.push_back(track[index]);
+
+            auto result = crc8(frame);
+            for (int j = 7; j >= 0; --j)
+                frame.push_back((result >> j) & 1);
+            // crc8 generated
+
             for (int j = 0; j < 50; ++j)
-                outputTrack.emplace_back(Fixed(0));
+                outputTrack.emplace_back(Constants::f0);
             for (auto x: preamble)
                 outputTrack.push_back(x);
-            for (int j = 0; j < colOutput; ++j) {
+
+            for (int j = 0; j < frame.size(); ++j) {
                 if (frame[j]) {
                     for (int k = 0; k < 48; ++k)
                         outputTrack.emplace_back(carrier[k + j * 48]);
@@ -331,9 +357,47 @@ private:
             }
         }
         // Just in case
-        for (int i = 0; i < 50; ++i)
-            outputTrack.emplace_back(Fixed(0));
+        for (int i = 0; i < 50; ++i) { outputTrack.emplace_back(Constants::f0); }
+        // The rest does not make 100 number
     }
+
+//    void generateSignal() {
+//        auto length = track.size();
+//        outputTrack.clear();
+//
+//        size_t index = 0;
+//        for (int i = 0; i < floor(length / 100); ++i) {
+//            auto target = index + 100;
+//            vector<double> frame;
+//            vector<bool> crcFrame;
+//            frame.reserve(108);
+//            crcFrame.reserve(100);
+//            for (; index < target; ++index) {
+//                frame.push_back(track[index]);
+//                crcFrame.push_back(track[index]);
+//            }
+//
+//            auto result = crc8(crcFrame);
+//            for (int j = 0; j < 8; ++j) {
+//                frame.push_back((result & 0x80) >> 7);
+//                result <<= 1;
+//            }
+//            // crc8 generated
+//
+//            for (int j = 0; j < 50; ++j) { outputTrack.push_back(Fixed(0)); }
+//            outputTrack.insert(std::end(outputTrack), std::begin(preamble), std::end(preamble));
+//
+//            for (int j = 0; j < frame.size(); ++j) {
+//                auto temp = frame[j] * 2 - 1;
+//                for (int k = 0; k < 48; ++k) { outputTrack.push_back(carrier[k + j * 48] * Fixed(temp)); }
+//            }
+//        }
+//        // Just in case
+//        for (int i = 0; i < 50; ++i) { outputTrack.push_back(Fixed(0)); }
+//        // The rest does not make 100 number
+////        for (double &i: outputTrack) { inputBuffer.push_back(i); }
+////        processInput();
+//    }
 
 private:
     std::vector<bool> track;
