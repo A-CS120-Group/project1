@@ -1,11 +1,11 @@
-#include "Part4.h"
+#include "Part3.h"
 #include <JuceHeader.h>
 
 class Application : public juce::JUCEApplication {
 public:
     Application() = default;
 
-    const juce::String getApplicationName() override { return "Part4"; }
+    const juce::String getApplicationName() override { return "Part3"; }
     const juce::String getApplicationVersion() override { return "1.0.0"; }
 
     void initialise(const juce::String &) override { mainWindow = new MainWindow(getApplicationName(), new MainContentComponent, *this); }
