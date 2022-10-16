@@ -1,5 +1,5 @@
+#include "Part4.h"
 #include <JuceHeader.h>
-#include "Part3.h"
 
 class Application : public juce::JUCEApplication {
 public:

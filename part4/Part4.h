@@ -31,7 +31,7 @@ public:
                                         File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
                                         "*.in");
 
-        titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
+        titleLabel.setText("Part4", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
         titleLabel.setFont(juce::Font(36, juce::Font::FontStyleFlags::bold));
         titleLabel.setJustificationType(juce::Justification(juce::Justification::Flags::centred));
@@ -94,11 +94,11 @@ public:
 
 private:
     void prepareToPlay([[maybe_unused]]int samplesPerBlockExpected, [[maybe_unused]]double sampleRate) override {
-        std::ifstream file(getPath("part3/carrier.dat", 5));
+        std::ifstream file(getPath("part4/carrier.dat", 5));
         for (auto &x: carrier)
             file >> x.l;
         file.close();
-        file.open(getPath("part3/preamble.dat", 5));
+        file.open(getPath("part4/preamble.dat", 5));
         for (auto &x: preamble)
             file >> x.l;
         file.close();
@@ -141,7 +141,7 @@ private:
         const MessageManagerLock mmLock;
         switch (status) {
             case 0:
-                titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
+                titleLabel.setText("Part4", juce::NotificationType::dontSendNotification);
                 break;
             case 1:
                 titleLabel.setText("Sending", juce::NotificationType::dontSendNotification);
@@ -156,7 +156,6 @@ private:
     }
 
     void processInput() {
-        inputBuffer = outputTrack;
         vector<int> rowError;
         vector<bool> output(rowOutput * colOutput);
         ECC ecc;
