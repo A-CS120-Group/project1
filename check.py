@@ -1,5 +1,5 @@
-# a = input()
-a = 'output.out'
+a = input()
+# a = 'output.out'
 with open("input.in") as input_file:
     with open(a) as output_file:
         b = input_file.read()

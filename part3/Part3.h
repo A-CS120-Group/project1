@@ -3,7 +3,7 @@
 #include <chrono>
 #include <fstream>
 
-#define Flash
+//#define Flash
 #pragma once
 
 using juce::File;
@@ -27,7 +27,7 @@ void vecOutput(vector<bool> a) {
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
-        auto openFile = new FileChooser("Choose file to send",
+        openFile = new FileChooser("Choose file to send",
                                         File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
                                         "*.in");
 
@@ -41,7 +41,7 @@ public:
         recordButton.setButtonText("Send");
         recordButton.setSize(80, 40);
         recordButton.setCentrePosition(150, 140);
-        recordButton.onClick = [this, openFile] {
+        recordButton.onClick = [this] {
             if (status != 0) { return; }
             openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
                                   [this](const FileChooser &chooser) {
@@ -87,7 +87,10 @@ public:
         setAudioChannels(1, 1);
     }
 
-    ~MainContentComponent() override { shutdownAudio(); }
+    ~MainContentComponent() override {
+        delete openFile;
+        shutdownAudio();
+    }
 
 private:
     void prepareToPlay([[maybe_unused]]int samplesPerBlockExpected, [[maybe_unused]]double sampleRate) override {
@@ -336,6 +339,8 @@ private:
     }
 
 private:
+    FileChooser* openFile;
+
     std::vector<bool> track;
     std::vector<Fixed> outputTrack;
     std::vector<Fixed> inputBuffer;
