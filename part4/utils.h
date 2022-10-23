@@ -37,20 +37,20 @@ public:
 
 struct ECCResult{
     std::vector<bool> code;
-    std::vector<int> posMissing;
     int hammingDistance;
 };
 
 class ECC{
 public:
     std::vector<bool>code;
-    std::vector<int> posMissing, posError;
-    int numMissing, numError, hammingDistance;
+    std::vector<int> posError;
+    std::vector<int> posMissing;
+    int numError, numMissing, hammingDistance;
     std::vector<ECCResult> res;
     void searchError(int i);
     void searchMissing(int i);
-    void search(const std::vector<bool>&co, int nM, int nE);
-    void search(const std::vector<bool>&co, int nM, int nE, const std::vector<int>&pE);
+    void search(const std::vector<bool>&co, int nE, const std::vector<int>&pE, const std::vector<int>&pM);
+    void searchUninformed(const std::vector<bool>&co, int nE);
 };
 
 int countLeadingZero(unsigned long long x);

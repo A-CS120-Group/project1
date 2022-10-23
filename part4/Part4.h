@@ -18,20 +18,14 @@ const int rowTrack = 100;
 const int colOutput = colTrack + CRCL;
 const int rowOutput = rowTrack + CRCL;
 
-void vecOutput(vector<bool> a) {
-    for (auto x: a)
-        std::cerr << x;
-    std::cerr << '\n';
-}
-
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
         openFile = new FileChooser("Choose file to send",
-                                        File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
-                                        "*.in");
+                                   File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
+                                   "*.in");
 
-        titleLabel.setText("Part4", juce::NotificationType::dontSendNotification);
+        titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
         titleLabel.setFont(juce::Font(36, juce::Font::FontStyleFlags::bold));
         titleLabel.setJustificationType(juce::Justification(juce::Justification::Flags::centred));
@@ -94,11 +88,11 @@ public:
 
 private:
     void prepareToPlay([[maybe_unused]]int samplesPerBlockExpected, [[maybe_unused]]double sampleRate) override {
-        std::ifstream file(getPath("part4/carrier.dat", 5));
+        std::ifstream file(getPath("part3/carrier.dat", 5));
         for (auto &x: carrier)
             file >> x.l;
         file.close();
-        file.open(getPath("part4/preamble.dat", 5));
+        file.open(getPath("part3/preamble.dat", 5));
         for (auto &x: preamble)
             file >> x.l;
         file.close();
@@ -141,7 +135,7 @@ private:
         const MessageManagerLock mmLock;
         switch (status) {
             case 0:
-                titleLabel.setText("Part4", juce::NotificationType::dontSendNotification);
+                titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
                 break;
             case 1:
                 titleLabel.setText("Sending", juce::NotificationType::dontSendNotification);
@@ -156,16 +150,19 @@ private:
     }
 
     void processInput() {
+#ifdef Flash
+        inputBuffer = outputTrack;
+#endif
         vector<int> rowError;
         vector<bool> output(rowOutput * colOutput);
         ECC ecc;
         int iFrame = 0;
 
-        Fixed power = Fixed(0);
+        auto power = Fixed(0);
         int start_index = -1;
         std::deque<Fixed> sync(480, Fixed(0));
         std::vector<Fixed> decode;
-        Fixed syncPower_localMax = Fixed(0);
+        auto syncPower_localMax = Fixed(0);
         int state = 0;// 0 sync; 1 decode
         for (int iPos = 0; iPos < inputBuffer.size(); ++iPos) {
             Fixed cur(inputBuffer[iPos]);
@@ -173,7 +170,7 @@ private:
             if (state == 0) {
                 sync.pop_front();
                 sync.push_back(cur);
-                Fixed syncPower = Fixed(0);
+                auto syncPower = Fixed(0);
                 const Fixed *ptr = preamble;
                 for (auto x: sync) {
                     syncPower = syncPower + *ptr * x;
@@ -201,28 +198,15 @@ private:
                     decode = smooth(decode, 10);
                     std::vector<bool> frame(colOutput);
                     for (int j = 0; j < colOutput; ++j) {
-                        Fixed sum = Fixed(0);
+                        auto sum = Fixed(0);
                         auto iter = decode.begin() + 8 + j * 48, iterEnd = decode.begin() + 40 + j * 48;
                         for (; iter != iterEnd; ++iter)
                             sum = sum + *iter;
                         frame[j] = sum > Fixed(0);
                     }
-//                    if (iFrame == 0) {
-//                        for (int j = 63; j < colOutput; ++j)
-//                            frame[j].flip();
-//                    }
-//                    if (iFrame == 1) {
-//                        for (int j = 0; j < 56; ++j)
-//                            frame[j].flip();
-//                    }
-//                    if (iFrame == 43) {
-//                        frame[14].flip();
-//                        frame[63].flip();
-//                        frame[98].flip();
-//                    }
                     if (!crcCheck<CRCL>(frame)) {
-                        std::cerr << "Row Error " << iFrame << '\n';
-                        ecc.search(frame, 0, 2);
+                        std::cerr << "Row Error " << iFrame << " found\n";
+                        ecc.searchUninformed(frame, 2);
                         if (ecc.res.empty())
                             rowError.push_back(iFrame);
                         else {
@@ -240,41 +224,59 @@ private:
                 }
             }
         }
-        assert(iFrame <= rowOutput);
         vector<vector<bool>> colFrame(colTrack);
-        vector<vector<ECCResult>> colRes(colTrack);
-        std::map<vector<int>, int> posMissingCount;
+        vector<vector<bool>> colCorrected(colTrack);
         for (int j = 0; j < colTrack; ++j) {
             colFrame[j].resize(iFrame);
+            colCorrected[j].resize(colOutput);
             for (int i = 0; i < iFrame; ++i)
                 colFrame[j][i] = output[i * colOutput + j];
-            ecc.search(colFrame[j], rowOutput - iFrame, (int) rowError.size(), rowError);
-            colRes[j] = ecc.res;
             if (!crcCheck<CRCL>(colFrame[j]))
-                std::cerr << "Col Error " << j << " found " << colRes[j].size() << " possible solutions\n";
-            for (const auto &x: colRes[j])
-                posMissingCount.insert({x.posMissing, 0}).first->second += 1;
+                std::cerr << "Col Error " << j << " found\n";
         }
-        vector<vector<int>> posMissing;
-        for (const auto &x: posMissingCount)
-            if (x.second == colTrack)
-                posMissing.push_back(x.first);
-        assert(posMissing.size() == 1);
-        for (int j = 0; j < colTrack; ++j) {
-            int minHamming = INT_MAX;
-            for (auto &res: colRes[j])
-                if (std::equal(res.posMissing.begin(), res.posMissing.end(), posMissing[0].begin()) &&
-                    minHamming > res.hammingDistance) {
-                    minHamming = res.hammingDistance;
-                    colFrame[j] = res.code;
+        int numMissing = rowOutput - iFrame;
+        assert(numMissing >= 0);
+        std::cerr << "numMissing = " << numMissing << '\n';
+        vector<int> rowMissing(numMissing);
+        for (int i = 0; i < numMissing; ++i)
+            rowMissing[i] = i;
+        while (true) {
+            auto rowErrorAfter = rowError;
+            for (auto i: rowMissing) {
+                for (auto &x: rowErrorAfter)
+                    if (i <= x) ++x;
+            }
+            bool solveAll = true;
+            for (int j = 0; j < colTrack; ++j) {
+                vector<bool> code = colFrame[j];
+                for (auto i: rowMissing)
+                    code.insert(code.cbegin() + i, false);
+                ecc.search(code, (int) rowErrorAfter.size() + numMissing, rowErrorAfter, rowMissing);
+                if (ecc.res.empty()) {
+                    solveAll = false;
+                    break;
                 }
-            assert(minHamming != INT_MAX);
+                colCorrected[j] = std::min_element(ecc.res.begin(), ecc.res.end(),
+                                                   [](const ECCResult &x, const ECCResult &y) {
+                                                       return x.hammingDistance < y.hammingDistance;
+                                                   })->code;
+            }
+            if (solveAll) // find solution that satisfy all columns
+                break;
+            // get next rowMissing
+            int p = numMissing - 1;
+            while (p >= 0 && rowMissing[p] >= iFrame + p)
+                --p;
+            assert(p >= 0);
+            ++rowMissing[p];
+            for (++p; p < numMissing; ++p)
+                rowMissing[p] = rowMissing[p - 1] + 1;
         }
         std::cout << "Finish signal decoding!" << std::endl;
         // Save in a file
 #ifdef Flash
-#define FName R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
-        assert(remove(FName) == 0);
+        #define FName R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
+        remove(FName);
         juce::File writeTo(FName);
 #else
 #ifdef WIN32
@@ -285,9 +287,8 @@ private:
 #endif
 #endif
         for (int i = 0; i < rowTrack; ++i) {
-            for (int j = 0; j < colTrack; ++j) {
-                writeTo.appendText(colFrame[j][i] ? "1" : "0");
-            }
+            for (int j = 0; j < colTrack; ++j)
+                writeTo.appendText(colCorrected[j][i] ? "1" : "0");
         }
         status = 0;
     }
@@ -338,7 +339,7 @@ private:
     }
 
 private:
-    FileChooser* openFile;
+    FileChooser *openFile;
 
     std::vector<bool> track;
     std::vector<Fixed> outputTrack;

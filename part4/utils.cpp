@@ -77,20 +77,92 @@ Fixed Fixed::operator-() const {
 bool Fixed::operator>(Fixed x) const {
     return operator-(x).l > 0;
 }
+//
+//void ECC::search(const std::vector<bool> &co, int nM, int nE,
+//                 const std::vector<int> &pM,
+//                 const std::vector<int> &pE) {
+//    code = co;
+//    posMissing.clear();
+//    if (pM.empty()) {
+//        posMissingPossible.resize(co.size() + 1);
+//        for (int i = 0; i < posMissingPossible.size(); ++i)
+//            posMissingPossible[i] = i;
+//    } else posMissingPossible = pM;
+//    if (pE.empty()) {
+//        posErrorPossible.resize(co.size());
+//        for (int i = 0; i < co.size(); ++i)
+//            posErrorPossible[i] = i;
+//    } else posErrorPossible = pE;
+//    numMissing = nM;
+//    numError = nE;
+//    hammingDistance = 0;
+//    res.clear();
+//    auto code1=code;
+//    searchMissing(0);
+//    assert(std::equal(code.begin(),code.end(),code1.begin()));
+//}
+//
+//void ECC::searchMissing(int i) {
+//    if (numMissing == 0)
+//        return searchError(0);
+//    for (; i < posMissingPossible.size(); ++i) {
+//        int pos = posMissingPossible[i];
+//        int posAfter = pos;
+//        for (auto x: posMissing)
+//            if (pos <= x)
+//                ++posAfter;
+//        posMissing.push_back(pos);
+//        code.insert(code.begin() + posAfter, false); // insert 0
+//        --numMissing;
+//        ++hammingDistance;
+//        searchMissing(i);
+//
+//        code[pos].flip(); // insert 1
+//        searchMissing(i);
+//
+//        posMissing.pop_back();
+//        code.erase(code.begin() + posAfter);
+//        ++numMissing;
+//        --hammingDistance;
+//    }
+//}
+//
+//void ECC::searchError(int i) {
+//    if (crcCheck<CRCL>(code))
+//        return res.push_back({code, posMissing, hammingDistance});
+//    if (numError == 0)
+//        return;
+//    for (; i < posErrorPossible.size(); ++i) {
+//        int pos = posErrorPossible[i];
+//        int posAfter = pos;
+//        for (auto x: posMissing)
+//            if (pos <= x)
+//                ++posAfter;
+//        code[posAfter].flip();
+//        --numError;
+//        ++hammingDistance;
+//        searchError(i + 1);
+//
+//        code[posAfter].flip();
+//        ++numError;
+//        --hammingDistance;
+//    }
+//}
 
-void ECC::search(const std::vector<bool> &co, int nM, int nE) {
+
+void ECC::searchUninformed(const std::vector<bool> &co, int nE) {
     std::vector<int> pE;
     for (int i = 0; i < co.size(); ++i)
         pE.push_back(i);
-    search(co, nM, nE, pE);
+    search(co, nE, pE, {});
 }
 
-void ECC::search(const std::vector<bool> &co, int nM, int nE, const std::vector<int> &pE) {
+void ECC::search(const std::vector<bool> &co, int nE, const std::vector<int> &pE, const std::vector<int> &pM) {
     code = co;
-    posMissing.clear();
     posError = pE;
-    numMissing = nM;
     numError = nE;
+    posMissing = pM;
+    numMissing = (int) pM.size();
     hammingDistance = 0;
     res.clear();
     searchMissing(0);
@@ -99,22 +171,15 @@ void ECC::search(const std::vector<bool> &co, int nM, int nE, const std::vector<
 void ECC::searchMissing(int i) {
     if (numMissing == 0)
         return searchError(0);
-    for (; i <= code.size(); ++i) {
-        for (auto &x: posError)
-            if (x >= i) ++x;
-        posMissing.push_back(i);
-        code.insert(code.begin() + i, false); // insert 0
+    for (; i < posMissing.size(); ++i) {
         --numMissing;
         ++hammingDistance;
+
+        code[posMissing[i]] = false;
+        searchMissing(i + 1);
+        code[posMissing[i]] = true;
         searchMissing(i + 1);
 
-        code[i].flip(); // insert 1
-        searchMissing(i + 1);
-
-        for (auto &x: posError)
-            if (x >= i) --x;
-        posMissing.pop_back();
-        code.erase(code.begin() + i);
         ++numMissing;
         --hammingDistance;
     }
@@ -122,16 +187,17 @@ void ECC::searchMissing(int i) {
 
 void ECC::searchError(int i) {
     if (crcCheck<CRCL>(code))
-        return res.push_back({code, posMissing, hammingDistance});
+        return res.push_back({code, hammingDistance});
     if (numError == 0)
         return;
     for (; i < posError.size(); ++i) {
-        code[posError[i]].flip();
         --numError;
         ++hammingDistance;
-        searchError(i + 1);
 
         code[posError[i]].flip();
+        searchError(i + 1);
+        code[posError[i]].flip();
+
         ++numError;
         --hammingDistance;
     }
@@ -157,7 +223,7 @@ int countLeadingZero(unsigned long long x) {
 template<>
 unsigned int crc<16>(const std::vector<bool> &source) {
     static unsigned char sourceString[20];
-    int stringLength = ((int)source.size() - 1) / 8 + 1;
+    int stringLength = ((int) source.size() - 1) / 8 + 1;
     for (int i = 0; i < stringLength; ++i) {
         unsigned q = 0;
         for (int j = 0; j < 8 && i * 8 + j < source.size(); ++j)
@@ -172,7 +238,7 @@ unsigned int crc<16>(const std::vector<bool> &source) {
 template<>
 unsigned int crc<32>(const std::vector<bool> &source) {
     static unsigned char sourceString[20];
-    int stringLength = ((int)source.size() - 1) / 8 + 1;
+    int stringLength = ((int) source.size() - 1) / 8 + 1;
     for (int i = 0; i < stringLength; ++i) {
         unsigned q = 0;
         for (int j = 0; j < 8 && i * 8 + j < source.size(); ++j)

@@ -13,17 +13,21 @@ using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
-const int colTrack = 100;
-const int rowTrack = 100;
-const int colOutput = colTrack + CRCL;
-const int rowOutput = rowTrack + CRCL;
+namespace Constants {
+    const Fixed f0 = Fixed(0);
+    const Fixed f2 = Fixed(2);
+    const Fixed f63 = Fixed(63);
+    const Fixed d20 = Fixed(1.0 / 20);
+    const Fixed d64 = Fixed(1.0 / 64);
+    const Fixed d200 = Fixed(1.0 / 200);
+}
 
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
-        openFile = new FileChooser("Choose file to send",
-                                   File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
-                                   "*.in");
+        auto openFile = new FileChooser("Choose file to send",
+                                        File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
+                                        "*.in");
 
         titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
@@ -35,7 +39,7 @@ public:
         recordButton.setButtonText("Send");
         recordButton.setSize(80, 40);
         recordButton.setCentrePosition(150, 140);
-        recordButton.onClick = [this] {
+        recordButton.onClick = [this, openFile] {
             if (status != 0) { return; }
             openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
                                   [this](const FileChooser &chooser) {
@@ -81,10 +85,7 @@ public:
         setAudioChannels(1, 1);
     }
 
-    ~MainContentComponent() override {
-        delete openFile;
-        shutdownAudio();
-    }
+    ~MainContentComponent() override { shutdownAudio(); }
 
 private:
     void prepareToPlay([[maybe_unused]]int samplesPerBlockExpected, [[maybe_unused]]double sampleRate) override {
@@ -150,134 +151,14 @@ private:
     }
 
     void processInput() {
-#ifdef Flash
-        inputBuffer = outputTrack;
-#endif
-        vector<int> rowError;
-        vector<bool> output(rowOutput * colOutput);
-        ECC ecc;
-        int iFrame = 0;
-
-        auto power = Fixed(0);
+        Fixed power = Constants::f0;
         int start_index = -1;
-        std::deque<Fixed> sync(480, Fixed(0));
+        std::deque<Fixed> sync(480, Constants::f0);
         std::vector<Fixed> decode;
-        auto syncPower_localMax = Fixed(0);
+        Fixed syncPower_localMax = Constants::f0;
         int state = 0;// 0 sync; 1 decode
-        for (int iPos = 0; iPos < inputBuffer.size(); ++iPos) {
-            Fixed cur(inputBuffer[iPos]);
-            power = power * Fixed(63) / 64 + cur * cur / 64;
-            if (state == 0) {
-                sync.pop_front();
-                sync.push_back(cur);
-                auto syncPower = Fixed(0);
-                const Fixed *ptr = preamble;
-                for (auto x: sync) {
-                    syncPower = syncPower + *ptr * x;
-                    ++ptr;
-                }
-                syncPower = syncPower / 200;
-                if (syncPower > power * Fixed(2) && syncPower > syncPower_localMax && syncPower > Fixed(1) / 20) {
-                    syncPower_localMax = syncPower;
-                    start_index = iPos;
-                } else if (iPos - start_index > 200 && start_index != -1) {
-                    syncPower_localMax = Fixed(0);
-                    sync = std::deque<Fixed>(480, Fixed(0));
-                    state = 1;
-                    decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + iPos + 1);
-                    //std::cerr << "Header found " << start_index << ' ' << iPos << std::endl;
-                }
-            } else {
-                decode.push_back(cur);
-                if (decode.size() == 48 * colOutput) {
-                    const Fixed *ptr = carrier;
-                    for (auto &x: decode) {
-                        x = x * *ptr;
-                        ++ptr;
-                    }
-                    decode = smooth(decode, 10);
-                    std::vector<bool> frame(colOutput);
-                    for (int j = 0; j < colOutput; ++j) {
-                        auto sum = Fixed(0);
-                        auto iter = decode.begin() + 8 + j * 48, iterEnd = decode.begin() + 40 + j * 48;
-                        for (; iter != iterEnd; ++iter)
-                            sum = sum + *iter;
-                        frame[j] = sum > Fixed(0);
-                    }
-                    if (!crcCheck<CRCL>(frame)) {
-                        std::cerr << "Row Error " << iFrame << " found\n";
-                        ecc.searchUninformed(frame, 2);
-                        if (ecc.res.empty())
-                            rowError.push_back(iFrame);
-                        else {
-                            std::cerr << "Row Error " << iFrame << " corrected in the first step!\n";
-                            assert(ecc.res.size() == 1);
-                            frame = ecc.res[0].code;
-                        }
-                    }
-                    for (int j = 0; j < colOutput; ++j)
-                        output[iFrame * colOutput + j] = frame[j];
-                    start_index = -1;
-                    decode.clear();
-                    state = 0;
-                    ++iFrame;
-                }
-            }
-        }
-        vector<vector<bool>> colFrame(colTrack);
-        vector<vector<bool>> colCorrected(colTrack);
-        for (int j = 0; j < colTrack; ++j) {
-            colFrame[j].resize(iFrame);
-            colCorrected[j].resize(colOutput);
-            for (int i = 0; i < iFrame; ++i)
-                colFrame[j][i] = output[i * colOutput + j];
-            if (!crcCheck<CRCL>(colFrame[j]))
-                std::cerr << "Col Error " << j << " found\n";
-        }
-        int numMissing = rowOutput - iFrame;
-        assert(numMissing >= 0);
-        std::cerr << "numMissing = " << numMissing << '\n';
-        vector<int> rowMissing(numMissing);
-        for (int i = 0; i < numMissing; ++i)
-            rowMissing[i] = i;
-        while (true) {
-            auto rowErrorAfter = rowError;
-            for (auto i: rowMissing) {
-                for (auto &x: rowErrorAfter)
-                    if (i <= x) ++x;
-            }
-            bool solveAll = true;
-            for (int j = 0; j < colTrack; ++j) {
-                vector<bool> code = colFrame[j];
-                for (auto i: rowMissing)
-                    code.insert(code.cbegin() + i, false);
-                ecc.search(code, (int) rowErrorAfter.size() + numMissing, rowErrorAfter, rowMissing);
-                if (ecc.res.empty()) {
-                    solveAll = false;
-                    break;
-                }
-                colCorrected[j] = std::min_element(ecc.res.begin(), ecc.res.end(),
-                                                   [](const ECCResult &x, const ECCResult &y) {
-                                                       return x.hammingDistance < y.hammingDistance;
-                                                   })->code;
-            }
-            if (solveAll) // find solution that satisfy all columns
-                break;
-            // get next rowMissing
-            int p = numMissing - 1;
-            while (p >= 0 && rowMissing[p] >= iFrame + p)
-                --p;
-            assert(p >= 0);
-            ++rowMissing[p];
-            for (++p; p < numMissing; ++p)
-                rowMissing[p] = rowMissing[p - 1] + 1;
-        }
-        std::cout << "Finish signal decoding!" << std::endl;
-        // Save in a file
 #ifdef Flash
-#define FName R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
-        remove(FName);
-        juce::File writeTo(FName);
+        juce::File writeTo(R"(C:\Users\hujt\Desktop\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #else
 #ifdef WIN32
         juce::File writeTo(
@@ -286,44 +167,99 @@ private:
         juce::File writeTo(juce::File::getCurrentWorkingDirectory().getFullPathName() + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #endif
 #endif
-        for (int i = 0; i < rowTrack; ++i) {
-            for (int j = 0; j < colTrack; ++j)
-                writeTo.appendText(colCorrected[j][i] ? "1" : "0");
+        for (int i = 0; i < inputBuffer.size(); ++i) {
+            Fixed cur(inputBuffer[i]);
+            power = (power * Constants::f63 + cur * cur) * Constants::d64;
+            if (state == 0) {
+                sync.pop_front();
+                sync.push_back(cur);
+                Fixed syncPower = Constants::f0;
+                const Fixed *ptr = preamble;
+                for (auto x: sync) {
+                    syncPower = syncPower + *ptr * x;
+                    ++ptr;
+                }
+                syncPower = syncPower * Constants::d200;
+                if (syncPower > power * Constants::f2 && syncPower > syncPower_localMax && syncPower > Constants::d20) {
+                    syncPower_localMax = syncPower;
+                    start_index = i;
+                } else if (i - start_index > 200 && start_index != -1) {
+                    syncPower_localMax = Constants::f0;
+                    sync = std::deque<Fixed>(480, Constants::f0);
+                    state = 1;
+                    decode = std::vector<Fixed>(inputBuffer.begin() + start_index + 1, inputBuffer.begin() + i + 1);
+                    std::cout << "Header found" << std::endl;
+                }
+            } else {
+                decode.push_back(cur);
+                if (decode.size() == 48 * 108) {
+                    const Fixed *ptr = carrier;
+                    for (auto &x: decode) {
+                        x = x * *ptr;
+                        ++ptr;
+                    }
+                    decode = smooth(decode, 10);
+                    std::vector<bool> bits(100);
+                    int check = 0;
+                    for (int j = 0; j < 108; ++j) {
+                        Fixed sum = Constants::f0;
+                        auto iter = decode.begin() + 9 + j * 48, iterEnd = decode.begin() + 30 + j * 48;
+                        for (; iter != iterEnd; ++iter)
+                            sum = sum + *iter;
+                        bool curBit = sum > Constants::f0;
+                        if (j < 100)
+                            bits[j] = curBit;
+                        else
+                            check = (check << 1) | (int) curBit;
+                    }
+                    if (check != crc8(bits)) {
+                        std::cout << "Error" << i << "Total" << inputBuffer.size();
+                    }
+                    // Save in a file
+                    for (int j = 0; j < 100; ++j) {
+                        std::cout << bits[j];
+                        writeTo.appendText(bits[j] ? "1" : "0");
+                    }
+                    std::cout << std::endl;
+                    start_index = -1;
+                    decode.clear();
+                    state = 0;
+                }
+            }
         }
+        std::cout << "Finish processing!" << std::endl;
         status = 0;
     }
 
     void releaseResources() override {}
 
     void generateSignal() {
+        auto length = track.size();
         outputTrack.clear();
-        vector<unsigned int> colCRC(colTrack);
-        for (int j = 0; j < colTrack; ++j) {
-            vector<bool> frame(rowTrack);
-            for (int i = 0; i < rowTrack; ++i)
-                frame[i] = track[i * colTrack + j];
-            colCRC[j] = crc<CRCL>(frame);
-        }
 
-        for (int i = 0; i < rowOutput; ++i) {
+        size_t index = 0;
+        for (int i = 0; i < length / 100; ++i) {
+            auto target = index + 100;
             vector<bool> frame;
-            frame.reserve(colOutput);
-            if (i < rowTrack) {
-                for (int j = 0; j < colTrack; ++j)
-                    frame.push_back(track[i * colTrack + j]);
-            } else {
-                for (int j = 0; j < colTrack; ++j)
-                    frame.push_back((colCRC[j] >> (CRCL - 1 - (i - rowTrack))) & 1);
+            vector<bool> crcFrame;
+            frame.reserve(108);
+            crcFrame.reserve(100);
+            for (; index < target; ++index) {
+                frame.push_back(track[index]);
+                crcFrame.push_back(track[index]);
             }
-            auto rowCRC = crc<CRCL>(frame);
-            for (int j = 0; j < CRCL; ++j)
-                frame.push_back((rowCRC >> (CRCL - 1 - j)) & 1);
-            // crc generated
+
+            auto result = crc8(crcFrame);
+            for (int j = 7; j >= 0; --j)
+                frame.push_back((result >> j) & 1);
+            // crc8 generated
+
             for (int j = 0; j < 50; ++j)
-                outputTrack.emplace_back(Fixed(0));
+                outputTrack.emplace_back(Constants::f0);
             for (auto x: preamble)
                 outputTrack.push_back(x);
-            for (int j = 0; j < colOutput; ++j) {
+
+            for (int j = 0; j < frame.size(); ++j) {
                 if (frame[j]) {
                     for (int k = 0; k < 48; ++k)
                         outputTrack.emplace_back(carrier[k + j * 48]);
@@ -334,13 +270,11 @@ private:
             }
         }
         // Just in case
-        for (int i = 0; i < 50; ++i)
-            outputTrack.emplace_back(Fixed(0));
+        for (int i = 0; i < 50; ++i) { outputTrack.emplace_back(Constants::f0); }
+        // The rest does not make 100 number
     }
 
 private:
-    FileChooser *openFile;
-
     std::vector<bool> track;
     std::vector<Fixed> outputTrack;
     std::vector<Fixed> inputBuffer;
