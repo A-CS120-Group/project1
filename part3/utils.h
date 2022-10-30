@@ -27,7 +27,7 @@ public:
     Fixed operator+(Fixed x) const;
     Fixed operator-(Fixed x) const;
     Fixed operator*(Fixed x) const;
-    //Fixed operator/(int x) const;
+    Fixed operator/(int x) const;
     Fixed operator-() const;
     bool operator>(Fixed x) const;
     long long l;
@@ -35,7 +35,7 @@ public:
 
 int countLeadingZero(unsigned long long x);
 
-int crc8(const std::vector<bool> &source);
+unsigned int crc8(const std::vector<bool> &source);
 
 std::vector<Fixed> smooth(const std::vector<Fixed> &y, size_t span);
 

@@ -17,17 +17,15 @@ namespace Constants {
     const Fixed f0 = Fixed(0);
     const Fixed f2 = Fixed(2);
     const Fixed f63 = Fixed(63);
-    const Fixed d20 = Fixed(1.0 / 20);
-    const Fixed d64 = Fixed(1.0 / 64);
-    const Fixed d200 = Fixed(1.0 / 200);
-}
+    const Fixed d20 = Fixed(1) / 20;
+    const Fixed d64 = Fixed(1) / 64;
+    const Fixed d200 = Fixed(1) / 200;
+}// namespace Constants
 
 class MainContentComponent : public juce::AudioAppComponent {
 public:
     MainContentComponent() {
-        auto openFile = new FileChooser("Choose file to send",
-                                        File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory),
-                                        "*.in");
+        auto openFile = new FileChooser("Choose file to send", File::getSpecialLocation(File::SpecialLocationType::userDesktopDirectory), "*.in");
 
         titleLabel.setText("Part3", juce::NotificationType::dontSendNotification);
         titleLabel.setSize(160, 40);
@@ -41,29 +39,28 @@ public:
         recordButton.setCentrePosition(150, 140);
         recordButton.onClick = [this, openFile] {
             if (status != 0) { return; }
-            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
-                                  [this](const FileChooser &chooser) {
-                                      FileInputStream inputStream(chooser.getResult());
-                                      if (inputStream.failedToOpen()) {
-                                          return;
-                                      } else {
-                                          // Put all information in the track
-                                          juce::String inputString = inputStream.readString();
-                                          track.clear();
-                                          track.reserve(inputStream.getTotalLength());
-                                          for (auto _: inputString) {
-                                              auto nextChar = static_cast<char>(_);
-                                              if (nextChar == '0') {
-                                                  track.push_back(false);
-                                              } else if (nextChar == '1') {
-                                                  track.push_back(true);
-                                              }
-                                          }
-                                          generateSignal();
-                                          readPosition = 0;
-                                          status = 1;
-                                      }
-                                  });
+            openFile->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles, [this](const FileChooser &chooser) {
+                FileInputStream inputStream(chooser.getResult());
+                if (inputStream.failedToOpen()) {
+                    return;
+                } else {
+                    // Put all information in the track
+                    juce::String inputString = inputStream.readString();
+                    track.clear();
+                    track.reserve(inputStream.getTotalLength());
+                    for (auto _: inputString) {
+                        auto nextChar = static_cast<char>(_);
+                        if (nextChar == '0') {
+                            track.push_back(false);
+                        } else if (nextChar == '1') {
+                            track.push_back(true);
+                        }
+                    }
+                    generateSignal();
+                    readPosition = 0;
+                    status = 1;
+                }
+            });
         };
         addAndMakeVisible(recordButton);
 
@@ -88,14 +85,12 @@ public:
     ~MainContentComponent() override { shutdownAudio(); }
 
 private:
-    void prepareToPlay([[maybe_unused]]int samplesPerBlockExpected, [[maybe_unused]]double sampleRate) override {
+    void prepareToPlay([[maybe_unused]] int samplesPerBlockExpected, [[maybe_unused]] double sampleRate) override {
         std::ifstream file(getPath("part3/carrier.dat", 5));
-        for (auto &x: carrier)
-            file >> x.l;
+        for (auto &x: carrier) file >> x.l;
         file.close();
         file.open(getPath("part3/preamble.dat", 5));
-        for (auto &x: preamble)
-            file >> x.l;
+        for (auto &x: preamble) file >> x.l;
         file.close();
     }
 
@@ -129,7 +124,8 @@ private:
                 } else if (status == 3) {
                     status = -1;
                     processInput();
-                } else buffer->clear();
+                } else
+                    buffer->clear();
             }
         }
 
@@ -161,8 +157,7 @@ private:
         juce::File writeTo(R"(C:\Users\hujt\Desktop\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #else
 #ifdef WIN32
-        juce::File writeTo(
-                R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
+        juce::File writeTo(R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #else
         juce::File writeTo(juce::File::getCurrentWorkingDirectory().getFullPathName() + juce::Time::getCurrentTime().toISO8601(false) + ".out");
 #endif
@@ -203,18 +198,14 @@ private:
                     int check = 0;
                     for (int j = 0; j < 108; ++j) {
                         Fixed sum = Constants::f0;
-                        auto iter = decode.begin() + 9 + j * 48, iterEnd = decode.begin() + 30 + j * 48;
-                        for (; iter != iterEnd; ++iter)
-                            sum = sum + *iter;
+                        auto iter = decode.begin() + 8 + j * 48, iterEnd = decode.begin() + 40 + j * 48;
+                        for (; iter != iterEnd; ++iter) sum = sum + *iter;
                         bool curBit = sum > Constants::f0;
-                        if (j < 100)
-                            bits[j] = curBit;
+                        if (j < 100) bits[j] = curBit;
                         else
                             check = (check << 1) | (int) curBit;
                     }
-                    if (check != crc8(bits)) {
-                        std::cout << "Error" << i << "Total" << inputBuffer.size();
-                    }
+                    if (check != crc8(bits)) { std::cout << "Error" << i << "Total" << inputBuffer.size(); }
                     // Save in a file
                     for (int j = 0; j < 100; ++j) {
                         std::cout << bits[j];
@@ -250,28 +241,27 @@ private:
             }
 
             auto result = crc8(crcFrame);
-            for (int j = 7; j >= 0; --j)
-                frame.push_back((result >> j) & 1);
+            for (int j = 7; j >= 0; --j) frame.push_back((result >> j) & 1);
             // crc8 generated
 
-            for (int j = 0; j < 50; ++j)
-                outputTrack.emplace_back(Constants::f0);
-            for (auto x: preamble)
-                outputTrack.push_back(x);
+            for (int j = 0; j < 50; ++j) outputTrack.emplace_back(Constants::f0);
+            for (auto x: preamble) outputTrack.push_back(x);
 
             for (int j = 0; j < frame.size(); ++j) {
                 if (frame[j]) {
-                    for (int k = 0; k < 48; ++k)
-                        outputTrack.emplace_back(carrier[k + j * 48]);
+                    for (int k = 0; k < 48; ++k) outputTrack.emplace_back(carrier[k + j * 48]);
                 } else {
-                    for (int k = 0; k < 48; ++k)
-                        outputTrack.emplace_back(-carrier[k + j * 48]);
+                    for (int k = 0; k < 48; ++k) outputTrack.emplace_back(-carrier[k + j * 48]);
                 }
             }
         }
         // Just in case
         for (int i = 0; i < 50; ++i) { outputTrack.emplace_back(Constants::f0); }
         // The rest does not make 100 number
+
+        // TODO: Check here
+//        for (auto i: outputTrack) { inputBuffer.push_back(i); }
+//        processInput();
     }
 
 private:
