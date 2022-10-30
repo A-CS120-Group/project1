@@ -275,7 +275,7 @@ private:
         std::cout << "Finish signal decoding!" << std::endl;
         // Save in a file
 #ifdef Flash
-        #define FName R"(C:\Users\hujt\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
+        #define FName R"(C:\Users\FlashHu\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
         remove(FName);
         juce::File writeTo(FName);
 #else

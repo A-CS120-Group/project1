@@ -3,7 +3,7 @@
 #include <chrono>
 #include <fstream>
 
-//#define Flash
+#define Flash
 #pragma once
 
 using juce::File;
@@ -154,7 +154,9 @@ private:
         Fixed syncPower_localMax = Constants::f0;
         int state = 0;// 0 sync; 1 decode
 #ifdef Flash
-        juce::File writeTo(R"(C:\Users\hujt\Desktop\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
+        #define FName R"(C:\Users\FlashHu\OneDrive - shanghaitech.edu.cn\G3 fall\Computer Network\Proj1\project1\output.out)"
+        remove(FName);
+        juce::File writeTo(FName);
 #else
 #ifdef WIN32
         juce::File writeTo(R"(C:\Users\caoster\Desktop\CS120\project1\)" + juce::Time::getCurrentTime().toISO8601(false) + ".out");
